@@ -6,6 +6,13 @@ import dotenv from 'dotenv';
 import connectDB from './config/db';
 import path from 'path';
 
+// Import routes
+import authRoutes from './routes/authRoutes';
+// import userRoutes from './routes/userRoutes';
+// import postRoutes from './routes/postRoutes';
+// import storyRoutes from './routes/storyRoutes';
+// import chatRoutes from './routes/chatRoutes';
+
 // Load environment variables
 dotenv.config();
 
@@ -27,11 +34,11 @@ app.use(express.json());
 app.use(cors());
 
 // Routes
-// app.use('/api/auth', require('./routes/authRoutes'));
-// app.use('/api/users', require('./routes/userRoutes'));
-// app.use('/api/posts', require('./routes/postRoutes'));
-// app.use('/api/stories', require('./routes/storyRoutes'));
-// app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/auth', authRoutes);
+// app.use('/api/users', userRoutes);
+// app.use('/api/posts', postRoutes);
+// app.use('/api/stories', storyRoutes);
+// app.use('/api/chat', chatRoutes);
 
 // Default route
 app.get('/', (req: Request, res: Response) => {
