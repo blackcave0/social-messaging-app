@@ -89,6 +89,7 @@ export default function useAuth(): AuthState & AuthActions {
         isLoading: false,
       }));
     } catch (error: any) {
+      console.error('Login error:', error);
       setState(prev => ({
         ...prev,
         error: error.response?.data?.message || 'Login failed. Please try again.',

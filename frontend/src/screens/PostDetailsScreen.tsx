@@ -16,6 +16,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { API_URL, DEFAULT_AVATAR } from '../utils/config';
 import axios from 'axios';
+import { RootStackScreenProps } from '../types/navigation';
+
+type Props = RootStackScreenProps<'PostDetails'>;
 
 interface Comment {
   _id: string;
@@ -42,15 +45,6 @@ interface Post {
   likes: string[];
   comments: Comment[];
   createdAt: string;
-}
-
-interface PostDetailsScreenProps {
-  route: {
-    params: {
-      postId: string;
-    }
-  };
-  navigation: any;
 }
 
 const getMockPostDetails = (postId: string): Post => {
@@ -233,7 +227,7 @@ const getMockPostDetails = (postId: string): Post => {
   };
 };
 
-const PostDetailsScreen: React.FC<PostDetailsScreenProps> = ({ route, navigation }) => {
+const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { postId } = route.params;
   const { user } = useAuthContext();
   const [post, setPost] = useState<Post | null>(null);
