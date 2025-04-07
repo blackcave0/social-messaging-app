@@ -9,7 +9,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
-  StatusBar,
   ScrollView,
   Dimensions
 } from 'react-native';
@@ -17,7 +16,7 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { API_URL, DEFAULT_AVATAR } from '../utils/config';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import SafeAreaLayout from '../components/SafeAreaLayout';
 
 interface Post {
   _id: string;
@@ -43,7 +42,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     fetchPosts();
@@ -313,9 +311,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" />
-      
+    <SafeAreaLayout>
       <View style={styles.header}>
         <Text style={styles.logoText}>Social App</Text>
         <View style={styles.headerIcons}>
@@ -353,7 +349,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         }
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaLayout>
   );
 }
 

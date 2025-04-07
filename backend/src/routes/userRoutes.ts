@@ -6,13 +6,60 @@ import {
   acceptFriendRequest,
   rejectFriendRequest,
   getFriendRequests,
+  uploadProfilePicture,
+  searchUsers,
 } from '../controllers/userController';
 import { auth } from '../middleware/auth';
+import multer from 'multer';
+import path from 'path';
 
 const router = express.Router();
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../../uploads/'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'profile-' + uniqueSuffix + ext);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|gif/;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  },
+});
+
 // All routes in this file are protected with authentication
 router.use(auth);
+
+// @route   GET /api/users/search
+// @desc    Search users
+// @access  Private
+router.get('/search', searchUsers);
+
+// @route   GET /api/users/friend-requests
+// @desc    Get all friend requests
+// @access  Private
+router.get('/friend-requests', getFriendRequests);
+
+// @route   POST /api/users/upload-profile-picture
+// @desc    Upload profile picture
+// @access  Private
+router.post('/upload-profile-picture', upload.single('profilePicture'), uploadProfilePicture);
 
 // @route   GET /api/users/:id
 // @desc    Get user profile
@@ -38,10 +85,5 @@ router.post('/:id/accept-request', acceptFriendRequest);
 // @desc    Reject friend request
 // @access  Private
 router.post('/:id/reject-request', rejectFriendRequest);
-
-// @route   GET /api/users/friend-requests
-// @desc    Get all friend requests
-// @access  Private
-router.get('/friend-requests', getFriendRequests);
 
 export default router; 

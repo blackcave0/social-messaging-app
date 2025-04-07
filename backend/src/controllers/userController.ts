@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
+import mongoose, { Types } from 'mongoose';
+import { createNotification } from './notificationController';
 
 // @desc    Get user profile
 // @route   GET /api/users/:id
@@ -59,28 +61,47 @@ export const updateUserProfile = async (req: Request, res: Response) => {
 // @access  Private
 export const sendFriendRequest = async (req: Request, res: Response) => {
   try {
+    console.log(`Friend request from ${req.user._id} to ${req.params.id}`);
+    
     if (req.user._id.toString() === req.params.id) {
+      console.log('User attempted to send friend request to self');
       return res.status(400).json({ message: 'Cannot send friend request to yourself' });
     }
 
     const targetUser = await User.findById(req.params.id);
     if (!targetUser) {
+      console.log(`Target user ${req.params.id} not found`);
       return res.status(404).json({ message: 'User not found' });
     }
 
     // Check if already following
-    if (req.user.following.includes(req.params.id)) {
+    const targetUserId = new mongoose.Types.ObjectId(req.params.id);
+    if (req.user.following.some((id: mongoose.Types.ObjectId) => id.equals(targetUserId))) {
+      console.log(`User ${req.user._id} is already following ${targetUser._id}`);
       return res.status(400).json({ message: 'Already following this user' });
     }
 
     // Check if friend request already sent
-    if (targetUser.friendRequests.includes(req.user._id)) {
+    if (targetUser.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(req.user._id))) {
+      console.log(`Friend request already sent from ${req.user._id} to ${targetUser._id}`);
       return res.status(400).json({ message: 'Friend request already sent' });
     }
 
     // Add to friend requests
     targetUser.friendRequests.push(req.user._id);
     await targetUser.save();
+
+    // Create notification for the friend request
+    const notification = await createNotification(
+      targetUser._id.toString(),
+      req.user._id.toString(),
+      'friendRequest'
+    );
+    
+    console.log(`Friend request sent successfully from ${req.user._id} to ${targetUser._id}`);
+    if (notification) {
+      console.log(`Notification created: ${notification._id}`);
+    }
 
     res.json({ message: 'Friend request sent successfully' });
   } catch (error) {
@@ -104,22 +125,32 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Requesting user not found' });
     }
 
+    // Convert param ID to ObjectId
+    const requestingUserId = new mongoose.Types.ObjectId(req.params.id);
+
     // Check if there's a friend request to accept
-    if (!currentUser.friendRequests.includes(req.params.id)) {
+    if (!currentUser.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(requestingUserId))) {
       return res.status(400).json({ message: 'No friend request from this user' });
     }
 
     // Remove from friend requests
     currentUser.friendRequests = currentUser.friendRequests.filter(
-      id => id.toString() !== req.params.id
+      (id: mongoose.Types.ObjectId) => !id.equals(requestingUserId)
     );
 
     // Add to followers and following
-    currentUser.followers.push(req.params.id);
+    currentUser.followers.push(requestingUserId);
     requestingUser.following.push(req.user._id);
 
     await currentUser.save();
     await requestingUser.save();
+
+    // Create notification for the accepted friend request (follow notification)
+    await createNotification(
+      requestingUser._id.toString(),
+      currentUser._id.toString(),
+      'follow'
+    );
 
     res.json({ message: 'Friend request accepted' });
   } catch (error) {
@@ -138,14 +169,17 @@ export const rejectFriendRequest = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Convert param ID to ObjectId
+    const requestingUserId = new mongoose.Types.ObjectId(req.params.id);
+
     // Check if there's a friend request to reject
-    if (!user.friendRequests.includes(req.params.id)) {
+    if (!user.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(requestingUserId))) {
       return res.status(400).json({ message: 'No friend request from this user' });
     }
 
     // Remove from friend requests
     user.friendRequests = user.friendRequests.filter(
-      id => id.toString() !== req.params.id
+      (id: mongoose.Types.ObjectId) => !id.equals(requestingUserId)
     );
 
     await user.save();
@@ -173,6 +207,78 @@ export const getFriendRequests = async (req: Request, res: Response) => {
     res.json(user.friendRequests);
   } catch (error) {
     console.error('Get friend requests error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Upload profile picture
+// @route   POST /api/users/upload-profile-picture
+// @access  Private
+export const uploadProfilePicture = async (req: Request, res: Response) => {
+  try {
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file uploaded' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate URL for the uploaded file
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const profilePicture = `${baseUrl}/uploads/${req.file.filename}`;
+
+    // Update user's profile picture
+    user.profilePicture = profilePicture;
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      profilePicture,
+      message: 'Profile picture uploaded successfully' 
+    });
+  } catch (error) {
+    console.error('Upload profile picture error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Search users
+// @route   GET /api/users/search
+// @access  Private
+export const searchUsers = async (req: Request, res: Response) => {
+  try {
+    const { query } = req.query;
+    
+    console.log(`Search request received. Query: "${query}", User ID: ${req.user._id}`);
+    
+    if (!query || typeof query !== 'string') {
+      console.log('Invalid search query', { query });
+      return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    // Exclude the current user from search results
+    const users = await User.find({
+      $and: [
+        { _id: { $ne: req.user._id } },
+        {
+          $or: [
+            { username: { $regex: query, $options: 'i' } },
+            { name: { $regex: query, $options: 'i' } }
+          ]
+        }
+      ]
+    })
+    .select('_id username name profilePicture')
+    .limit(20);
+
+    console.log(`Search results for "${query}": ${users.length} users found`);
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Search users error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 }; 

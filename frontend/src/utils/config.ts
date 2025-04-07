@@ -1,8 +1,8 @@
 // API URL
-export const API_URL = 'http://172.30.122.133:5000';
+export const API_URL = 'http://192.168.30.181:5000';
 
 // Socket.IO URL
-export const SOCKET_URL = 'http://172.30.122.133:5000';
+export const SOCKET_URL = 'http://192.168.30.181:5000';
 
 // Default avatar
 export const DEFAULT_AVATAR = 'https://via.placeholder.com/150';

@@ -21,6 +21,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PostDetailsScreen from '../screens/PostDetailsScreen';
+import SearchScreen from '../screens/SearchScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -30,34 +31,47 @@ const AuthNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />
     <Stack.Screen name="Register" component={RegisterScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen} />
+
   </Stack.Navigator>
 );
 
 // Home stack navigator
 const HomeStack = () => (
-  <Stack.Navigator>
-    <Stack.Screen name="Feed" component={HomeScreen} options={{ headerTitle: 'Social App' }} />
-    <Stack.Screen name="PostDetails" component={PostDetailsScreen} options={{ headerTitle: 'Post' }} />
-    <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ headerTitle: 'Profile' }} />
-    <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ headerTitle: 'Create Post' }} />
-    <Stack.Screen name="CreateStory" component={CreateStoryScreen} options={{ headerTitle: 'Create Story' }} />
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Feed" component={HomeScreen} />
+    <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
+    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+    <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+    <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
   </Stack.Navigator>
 );
 
 // Chat stack navigator
 const ChatStack = () => (
-  <Stack.Navigator>
-    <Stack.Screen name="ChatList" component={ChatListScreen} options={{ headerTitle: 'Messages' }} />
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="ChatList" component={ChatListScreen} />
     <Stack.Screen name="Chat" component={ChatScreen} />
+  </Stack.Navigator>
+);
+
+// Create stack navigator
+const CreateStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+    <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
   </Stack.Navigator>
 );
 
 // Profile stack navigator
 const ProfileStack = () => (
-  <Stack.Navigator>
-    <Stack.Screen name="MyProfile" component={ProfileScreen} options={{ headerTitle: 'My Profile' }} />
-    <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerTitle: 'Edit Profile' }} />
-    <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerTitle: 'Settings' }} />
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="MyProfile" component={ProfileScreen} />
+    <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
+    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+    <Stack.Screen name="CreatePost" component={CreatePostScreen} />
   </Stack.Navigator>
 );
 
@@ -83,23 +97,24 @@ const MainNavigator = () => (
         return <Ionicons name={iconName as any} size={24} color={color} />;
       },
       tabBarActiveTintColor: '#405DE6',
-      tabBarInactiveTintColor: 'black',
+      tabBarInactiveTintColor: '#888888',
       tabBarShowLabel: false,
-      tabBarStyle: { 
+      tabBarStyle: {
         height: 50,
         borderTopWidth: 0.5,
         borderTopColor: '#E0E0E0',
         elevation: 0,
-        shadowOpacity: 0
+        shadowOpacity: 0,
+        backgroundColor: '#FFFFFF'
       },
       headerShown: false
     })}
   >
     <Tab.Screen name="Home" component={HomeStack} />
-    <Tab.Screen name="Search" component={NotificationsScreen} />
-    <Tab.Screen 
-      name="Create" 
-      component={CreatePostScreen as any} 
+    <Tab.Screen name="Search" component={SearchScreen} />
+    <Tab.Screen
+      name="Create"
+      component={CreateStack}
       options={{
         tabBarIcon: ({ focused, color }) => (
           <Ionicons name={focused ? "add-circle" : "add-circle-outline"} size={30} color={color} />
@@ -113,7 +128,7 @@ const MainNavigator = () => (
 
 // Root navigator
 export default function AppNavigator() {
-  const { user, isLoading } = useAuthContext();
+  const { user, isLoading, logout } = useAuthContext();
 
   if (isLoading) {
     return null; // Or a splash screen / loading indicator
