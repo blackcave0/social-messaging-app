@@ -8,6 +8,12 @@ import {
   getFriendRequests,
   uploadProfilePicture,
   searchUsers,
+  getSentFriendRequests,
+  followUser,
+  unfollowUser,
+  getUserRelationship,
+  acceptFollowRequest,
+  rejectFollowRequest,
 } from '../controllers/userController';
 import { auth } from '../middleware/auth';
 import multer from 'multer';
@@ -56,6 +62,11 @@ router.get('/search', searchUsers);
 // @access  Private
 router.get('/friend-requests', getFriendRequests);
 
+// @route   GET /api/users/sent-requests
+// @desc    Get sent friend requests
+// @access  Private
+router.get('/sent-requests', getSentFriendRequests);
+
 // @route   POST /api/users/upload-profile-picture
 // @desc    Upload profile picture
 // @access  Private
@@ -85,5 +96,30 @@ router.post('/:id/accept-request', acceptFriendRequest);
 // @desc    Reject friend request
 // @access  Private
 router.post('/:id/reject-request', rejectFriendRequest);
+
+// @route   POST /api/users/:id/follow
+// @desc    Follow a user directly
+// @access  Private
+router.post('/:id/follow', followUser);
+
+// @route   POST /api/users/:id/unfollow
+// @desc    Unfollow a user
+// @access  Private
+router.post('/:id/unfollow', unfollowUser);
+
+// @route   GET /api/users/:id/relationship
+// @desc    Get relationship status with a user
+// @access  Private
+router.get('/:id/relationship', getUserRelationship);
+
+// @route   POST /api/users/:id/accept-follow-request
+// @desc    Accept follow request
+// @access  Private
+router.post('/:id/accept-follow-request', acceptFollowRequest);
+
+// @route   POST /api/users/:id/reject-follow-request
+// @desc    Reject follow request
+// @access  Private
+router.post('/:id/reject-follow-request', rejectFollowRequest);
 
 export default router; 
