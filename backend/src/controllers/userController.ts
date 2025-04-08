@@ -554,4 +554,125 @@ export const rejectFollowRequest = async (req: Request, res: Response) => {
     console.error('Reject follow request error:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+// @desc    Remove a follower
+// @route   POST /api/users/:id/remove-follower
+// @access  Private
+export const removeFollower = async (req: Request, res: Response) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const followerUser = await User.findById(req.params.id);
+    if (!followerUser) {
+      return res.status(404).json({ message: 'Follower user not found' });
+    }
+
+    // Convert param ID to ObjectId
+    const followerUserId = new mongoose.Types.ObjectId(req.params.id);
+
+    // Check if they are actually a follower
+    if (!currentUser.followers.some((id: mongoose.Types.ObjectId) => id.equals(followerUserId))) {
+      return res.status(400).json({ message: 'This user is not following you' });
+    }
+
+    // Remove from followers
+    currentUser.followers = currentUser.followers.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(followerUserId)
+    );
+
+    // Remove from following of the other user
+    followerUser.following = followerUser.following.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(req.user._id)
+    );
+
+    await currentUser.save();
+    await followerUser.save();
+
+    res.json({
+      success: true, 
+      message: 'Follower removed successfully'
+    });
+  } catch (error) {
+    console.error('Remove follower error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Block a user
+// @route   POST /api/users/:id/block
+// @access  Private
+export const blockUser = async (req: Request, res: Response) => {
+  try {
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: 'Cannot block yourself' });
+    }
+
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const userToBlock = await User.findById(req.params.id);
+    if (!userToBlock) {
+      return res.status(404).json({ message: 'User to block not found' });
+    }
+
+    // Convert param ID to ObjectId
+    const blockUserId = new mongoose.Types.ObjectId(req.params.id);
+    
+    // Check if already blocked
+    if (currentUser.blockedUsers && currentUser.blockedUsers.some((id: mongoose.Types.ObjectId) => id.equals(blockUserId))) {
+      return res.status(400).json({ message: 'User already blocked' });
+    }
+
+    // Initialize blockedUsers array if it doesn't exist
+    if (!currentUser.blockedUsers) {
+      currentUser.blockedUsers = [];
+    }
+
+    // Add to blocked users
+    currentUser.blockedUsers.push(blockUserId);
+
+    // Remove from followers/following if applicable
+    currentUser.followers = currentUser.followers.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(blockUserId)
+    );
+    
+    currentUser.following = currentUser.following.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(blockUserId)
+    );
+
+    // Remove user from the other user's followers/following
+    userToBlock.followers = userToBlock.followers.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(req.user._id)
+    );
+    
+    userToBlock.following = userToBlock.following.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(req.user._id)
+    );
+
+    // Also remove any pending friend requests
+    currentUser.friendRequests = currentUser.friendRequests.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(blockUserId)
+    );
+    
+    userToBlock.friendRequests = userToBlock.friendRequests.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(req.user._id)
+    );
+
+    await currentUser.save();
+    await userToBlock.save();
+
+    res.json({
+      success: true, 
+      message: 'User blocked successfully'
+    });
+  } catch (error) {
+    console.error('Block user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }; 
