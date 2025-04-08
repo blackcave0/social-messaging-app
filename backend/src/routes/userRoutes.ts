@@ -14,6 +14,8 @@ import {
   getUserRelationship,
   acceptFollowRequest,
   rejectFollowRequest,
+  removeFollower,
+  blockUser,
 } from '../controllers/userController';
 import { auth } from '../middleware/auth';
 import multer from 'multer';
@@ -113,13 +115,23 @@ router.post('/:id/unfollow', unfollowUser);
 router.get('/:id/relationship', getUserRelationship);
 
 // @route   POST /api/users/:id/accept-follow-request
-// @desc    Accept follow request
+// @desc    Accept a follow request
 // @access  Private
 router.post('/:id/accept-follow-request', acceptFollowRequest);
 
 // @route   POST /api/users/:id/reject-follow-request
-// @desc    Reject follow request
+// @desc    Reject a follow request
 // @access  Private
 router.post('/:id/reject-follow-request', rejectFollowRequest);
+
+// @route   POST /api/users/:id/remove-follower
+// @desc    Remove a follower
+// @access  Private
+router.post('/:id/remove-follower', removeFollower);
+
+// @route   POST /api/users/:id/block
+// @desc    Block a user
+// @access  Private
+router.post('/:id/block', blockUser);
 
 export default router; 
