@@ -8,6 +8,7 @@ export type RootStackParamList = {
   Register: undefined;
 
   // Main screens
+  Main: undefined;
   Feed: undefined;
   PostDetails: { postId: string };
   Post: undefined;
@@ -21,7 +22,9 @@ export type RootStackParamList = {
 
   // Chat screens
   ChatList: undefined;
-  Chat: { chatId: string };
+  Chat: { chatId?: string; userId?: string; name?: string };
+  ChatDetail: { chatId?: string; userId?: string; name?: string };
+  UserList: undefined;
 };
 
 export type HomeStackParamList = {
@@ -43,7 +46,9 @@ export type ProfileStackParamList = {
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  Chat: { chatId: string };
+  Chat: { chatId?: string; userId?: string; name?: string };
+  ChatDetail: { chatId?: string; userId?: string; name?: string };
+  UserList: undefined;
 };
 
 export type CreateStackParamList = {
@@ -55,7 +60,7 @@ export type RootTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Search: undefined;
   Create: NavigatorScreenParams<CreateStackParamList>;
-  Notifications: undefined;
+  Chat: NavigatorScreenParams<ChatStackParamList>;
   Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
@@ -76,4 +81,9 @@ export type ProfileStackScreenProps<T extends keyof ProfileStackParamList> = Com
 export type CreateStackScreenProps<T extends keyof CreateStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<CreateStackParamList, T>,
   RootTabScreenProps<'Create'>
+>;
+
+export type ChatStackScreenProps<T extends keyof ChatStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, T>,
+  RootTabScreenProps<'Chat'>
 >; 
