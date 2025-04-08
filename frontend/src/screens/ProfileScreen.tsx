@@ -72,6 +72,7 @@ interface FollowerUser {
   isPrivate?: boolean;
   followRequestSent?: boolean;
   followRequestReceived?: boolean;
+  isNowFollowed?: boolean; // Flag to track users we just followed but data isn't refreshed yet
 }
 
 type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, 'MyProfile'>;
@@ -89,6 +90,8 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  // Add a state to force refresh FlatList
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Follow/Follower state
   const [showFollowersModal, setShowFollowersModal] = useState(false);
@@ -96,6 +99,8 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   const [followers, setFollowers] = useState<FollowerUser[]>([]);
   const [following, setFollowing] = useState<FollowerUser[]>([]);
   const [loadingFollowers, setLoadingFollowers] = useState(false);
+  // Add state to track which user IDs are currently being followed
+  const [followingInProgress, setFollowingInProgress] = useState<{ [key: string]: boolean }>({});
 
   // Add new state variables
   const [followRequests, setFollowRequests] = useState<FollowerUser[]>([]);
@@ -324,7 +329,20 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       return;
     }
 
+    if (!userId) {
+      console.error('Invalid userId received in handleFollow:', userId);
+      Alert.alert('Error', 'Unable to follow this user. Invalid user data.');
+      return;
+    }
+
+    console.log('Attempting to follow user:', userId);
+
+    // Set this specific user's follow action as in progress
+    setFollowingInProgress(prev => ({ ...prev, [userId]: true }));
+
     try {
+      setLoading(true); // Set loading state while request is in progress
+
       const response = await axios.post(
         `${API_URL}/api/users/${userId}/follow`,
         {},
@@ -336,20 +354,76 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       );
 
       if (response.data.success) {
-        // Update following list
-        const updatedFollowing = [...following];
-        const newFollowing = response.data.user;
-        updatedFollowing.push(newFollowing);
-        setFollowing(updatedFollowing);
+        console.log('Follow success response:', response.data);
 
-        // Refresh user data
-        fetchCurrentUser();
-        Alert.alert('Success', 'Follow request sent successfully');
+        // Safely update following list with full validation
+        if (response.data.user && response.data.user._id) {
+          const newFollowing = response.data.user;
+
+          // Immediately update the UI by adding the user to the following list
+          // This will cause the renderUserItem to show the Message button on the next render
+          setFollowing(prevFollowing => {
+            // Make sure we don't add duplicates
+            if (!prevFollowing.some(f => f && f._id === newFollowing._id)) {
+              return [...prevFollowing, newFollowing];
+            }
+            return prevFollowing;
+          });
+
+          // Update the current follower in-place if they're in the followers list
+          // Create a new array to ensure React detects the change
+          const updatedFollowers = [...followers];
+          const followerIndex = updatedFollowers.findIndex(f => f._id === userId);
+
+          if (followerIndex !== -1) {
+            // Create a new object to ensure React detects the change
+            updatedFollowers[followerIndex] = {
+              ...updatedFollowers[followerIndex],
+              isNowFollowed: true
+            };
+            setFollowers(updatedFollowers);
+
+            // Force re-render of the list after state update
+            setTimeout(() => {
+              // Create another copy with same data to force refresh
+              setFollowers([...updatedFollowers]);
+              // Increment refresh key to force FlatList to re-render
+              setRefreshKey(prev => prev + 1);
+            }, 50);
+          }
+
+          // Also refresh followers data in the background
+          fetchFollowersAndFollowing().catch(err => {
+            console.error('Error refreshing follower data after follow:', err);
+          });
+
+          // Refresh user data in the background
+          fetchCurrentUser().catch(err => {
+            console.error('Error refreshing user data after follow:', err);
+          });
+
+          // No alert - UI has been updated immediately
+          console.log('Successfully followed user, UI updated');
+        } else {
+          console.warn('Invalid user object in follow response:', response.data);
+        }
       }
     } catch (error: any) {
       console.error('Error following user:', error);
+      if (error.response) {
+        console.error('Error response data:', error.response.data);
+        console.error('Error response status:', error.response.status);
+      }
       const errorMessage = error.response?.data?.message || 'Failed to follow user';
       Alert.alert('Error', errorMessage);
+    } finally {
+      // Clear the loading state for this specific user
+      setFollowingInProgress(prev => {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      });
+      setLoading(false);
     }
   };
 
@@ -371,7 +445,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       );
 
       if (response.data.success) {
-        // Remove from following list
+        // Remove from following list 
         setFollowing(following.filter(f => f._id !== userId));
         // Refresh user data
         fetchCurrentUser();
@@ -446,81 +520,164 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
   // Render a follower/following item
   const renderUserItem = ({ item, handleAction }: { item: FollowerUser, handleAction?: (userId: string) => void }) => {
-    if (!item || typeof item !== 'object' || !item._id) {
-      console.log('Invalid item received:', item);
+    // Safe guard against invalid items
+    if (!item || typeof item !== 'object') {
+      console.error('Invalid item passed to renderUserItem:', item);
       return (
         <View style={styles.userItemContainer}>
-          <Text>Invalid user data</Text>
+          <Text style={styles.errorText}>Invalid user data</Text>
         </View>
       );
     }
 
+    // Make sure we have an ID
+    if (!item._id) {
+      console.error('Item without _id passed to renderUserItem:', item);
+      return (
+        <View style={styles.userItemContainer}>
+          <Text style={styles.errorText}>Missing user ID</Text>
+        </View>
+      );
+    }
+
+    // Safe check for following - check both regular following status and the temporary isNowFollowed flag
+    const isUserFollowed =
+      (Array.isArray(following) && following.some(followingUser => followingUser &&
+        typeof followingUser === 'object' && followingUser._id === item._id)) ||
+      // Also consider users we just followed but data hasn't been refreshed yet  
+      item.isNowFollowed === true;
+
+    const isFollowerNotFollowed = !isUserFollowed && showFollowersModal;
+    const isFollowerAndFollowing = isUserFollowed && showFollowersModal;
+
+    const handleMessage = (userId: string) => {
+      if (!userId) {
+        console.error('Invalid userId passed to handleMessage:', userId);
+        return;
+      }
+
+      // Close current modal
+      setShowFollowersModal(false);
+      setShowFollowingModal(false);
+
+      // Navigate to the user profile instead, which will have a message button
+      navigation.navigate('UserProfile', { userId });
+    };
+
     const renderActionButton = () => {
-      if (item.followRequestReceived) {
-        return (
-          <View style={styles.actionButtonsContainer}>
+      try {
+        if (item.followRequestReceived) {
+          return (
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                onPress={() => handleAcceptFollowRequest(item._id)}
+              >
+                <Text style={styles.actionButtonText}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={() => handleRejectFollowRequest(item._id)}
+              >
+                <Text style={styles.actionButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        } else if (item.followRequestSent) {
+          return (
             <TouchableOpacity
-              style={[styles.actionButton, styles.acceptButton]}
-              onPress={() => handleAcceptFollowRequest(item._id)}
+              style={[styles.actionButton, styles.requestedButton]}
+              onPress={() => handleUnfollow(item._id)}
             >
-              <Text style={styles.actionButtonText}>Accept</Text>
+              <Text style={styles.actionButtonText}>Requested</Text>
             </TouchableOpacity>
+          );
+        } else if (handleAction) {
+          return (
             <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => handleRejectFollowRequest(item._id)}
+              style={[styles.actionButton, styles.unfollowButton]}
+              onPress={() => handleAction(item._id)}
             >
-              <Text style={styles.actionButtonText}>Reject</Text>
+              <Text style={styles.actionButtonText}>Unfollow</Text>
             </TouchableOpacity>
-          </View>
-        );
-      } else if (item.followRequestSent) {
+          );
+        } else if (isFollowerAndFollowing) {
+          // This follower is also being followed by you - show Message button
+          return (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.messageButton]}
+              onPress={() => handleMessage(item._id)}
+            >
+              <Text style={styles.actionButtonText}>Message</Text>
+            </TouchableOpacity>
+          );
+        } else if (isFollowerNotFollowed) {
+          // Special case: This is a follower who you're not following back
+          // Check if follow is in progress for this user
+          const isLoading = followingInProgress[item._id] === true;
+
+          return (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.followBackButton]}
+              onPress={() => handleFollow(item._id)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.actionButtonText}>Follow Back</Text>
+              )}
+            </TouchableOpacity>
+          );
+        } else {
+          return (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.followButton]}
+              onPress={() => handleFollow(item._id)}
+            >
+              <Text style={styles.actionButtonText}>Follow</Text>
+            </TouchableOpacity>
+          );
+        }
+      } catch (error) {
+        console.error('Error in renderActionButton:', error);
         return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.requestedButton]}
-            onPress={() => handleUnfollow(item._id)}
-          >
-            <Text style={styles.actionButtonText}>Requested</Text>
-          </TouchableOpacity>
-        );
-      } else if (handleAction) {
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.unfollowButton]}
-            onPress={() => handleAction(item._id)}
-          >
-            <Text style={styles.actionButtonText}>Unfollow</Text>
-          </TouchableOpacity>
-        );
-      } else {
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.followButton]}
-            onPress={() => handleFollow(item._id)}
-          >
-            <Text style={styles.actionButtonText}>Follow</Text>
+          <TouchableOpacity style={[styles.actionButton, styles.errorButton]}>
+            <Text style={styles.actionButtonText}>Error</Text>
           </TouchableOpacity>
         );
       }
     };
 
-    return (
-      <View style={styles.userItemContainer}>
-        <TouchableOpacity
-          style={styles.userItemMain}
-          onPress={() => handleViewUserProfile(item._id)}
-        >
-          <Image
-            source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
-            style={styles.userItemAvatar}
-          />
-          <View style={styles.userItemInfo}>
-            <Text style={styles.userItemName}>{item.name || 'Unknown User'}</Text>
-            <Text style={styles.userItemUsername}>@{item.username || 'unknown'}</Text>
-          </View>
-        </TouchableOpacity>
-        {renderActionButton()}
-      </View>
-    );
+    // Final rendering with extra safety
+    try {
+      return (
+        <View style={styles.userItemContainer}>
+          <TouchableOpacity
+            style={styles.userItemMain}
+            onPress={() => handleViewUserProfile(item._id)}
+          >
+            <Image
+              source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
+              style={styles.userItemAvatar}
+              defaultSource={{ uri: DEFAULT_AVATAR }}
+            />
+            <View style={styles.userItemInfo}>
+              <Text style={styles.userItemName}>{item.name || 'Unknown User'}</Text>
+              <Text style={styles.userItemUsername}>@{item.username || 'unknown'}</Text>
+            </View>
+          </TouchableOpacity>
+          {renderActionButton()}
+        </View>
+      );
+    } catch (error) {
+      console.error('Error rendering user item:', error);
+      return (
+        <View style={styles.userItemContainer}>
+          <Text style={styles.errorText}>Error displaying user</Text>
+        </View>
+      );
+    }
   };
 
   // Load followers and following on first load
@@ -530,20 +687,44 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     }
   }, [user, initialDataLoaded]);
 
-  // Add effect to log when modal visibility changes
+  // Add effect to log when modal visibility changes and validate data
   useEffect(() => {
     console.log('Followers modal visibility changed to:', showFollowersModal);
     if (showFollowersModal) {
-      console.log('Followers count when modal opened:', followers.length);
+      // Validate followers data when modal opens
+      if (!Array.isArray(followers)) {
+        console.error('Followers is not an array:', followers);
+        setFollowers([]);
+      } else {
+        // Filter out any invalid items before displaying
+        const validFollowers = followers.filter(f => f && typeof f === 'object' && f._id);
+        if (validFollowers.length !== followers.length) {
+          console.warn(`Fixed ${followers.length - validFollowers.length} invalid follower items`);
+          setFollowers(validFollowers);
+        }
+        console.log('Followers count when modal opened:', validFollowers.length);
+      }
     }
-  }, [showFollowersModal, followers.length]);
+  }, [showFollowersModal, followers]);
 
   useEffect(() => {
     console.log('Following modal visibility changed to:', showFollowingModal);
     if (showFollowingModal) {
-      console.log('Following count when modal opened:', following.length);
+      // Validate following data when modal opens
+      if (!Array.isArray(following)) {
+        console.error('Following is not an array:', following);
+        setFollowing([]);
+      } else {
+        // Filter out any invalid items before displaying
+        const validFollowing = following.filter(f => f && typeof f === 'object' && f._id);
+        if (validFollowing.length !== following.length) {
+          console.warn(`Fixed ${following.length - validFollowing.length} invalid following items`);
+          setFollowing(validFollowing);
+        }
+        console.log('Following count when modal opened:', validFollowing.length);
+      }
     }
-  }, [showFollowingModal, following.length]);
+  }, [showFollowingModal, following]);
 
   // --- Keep original functions (loadUserPosts, fetchUserPostsFromBackend, handleRefresh, handleEditProfile, handleSettings) ---
   const loadUserPosts = () => {
@@ -818,16 +999,31 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               </View>
             ) : (
               <FlatList
-                data={followers}
+                data={followers.filter(item => item && item._id)}
                 renderItem={({ item }) => {
+                  if (!item || !item._id) {
+                    console.log('Skipping invalid follower item');
+                    return null;
+                  }
                   console.log('Rendering follower item:', item._id);
-                  return renderUserItem({ item });
+                  // Add isFollowed flag to force UI update
+                  const isFollowed = following.some(f => f._id === item._id) || item.isNowFollowed === true;
+                  return renderUserItem({
+                    item,
+                  });
                 }}
                 keyExtractor={(item) => {
-                  console.log('Key for item:', item._id);
-                  return item._id;
+                  if (!item || !item._id) {
+                    return `invalid-${Math.random()}`;
+                  }
+                  // Include follow status in key to force re-render when status changes
+                  const isFollowed = following.some(f => f._id === item._id) || item.isNowFollowed === true;
+                  return `${item._id}-${isFollowed ? 'followed' : 'notfollowed'}`;
                 }}
                 contentContainerStyle={styles.userListContainer}
+                // Add extraData prop to force FlatList to re-render when following state changes
+                extraData={[following, followingInProgress, followers, refreshKey]}
+                key={`followers-list-${refreshKey}`}
               />
             )}
           </SafeAreaLayout>
@@ -873,19 +1069,29 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               </View>
             ) : (
               <FlatList
-                data={following}
+                data={following.filter(item => item && item._id)}
                 renderItem={({ item }) => {
+                  if (!item || !item._id) {
+                    console.log('Skipping invalid following item');
+                    return null;
+                  }
                   console.log('Rendering following item:', item._id);
                   return renderUserItem({
                     item,
-                    handleAction: handleUnfollow
+                    handleAction: handleUnfollow,
                   });
                 }}
                 keyExtractor={(item) => {
-                  console.log('Key for item:', item._id);
-                  return item._id;
+                  if (!item || !item._id) {
+                    return `invalid-${Math.random()}`;
+                  }
+                  console.log('Key for following item:', item._id);
+                  return `following-${item._id}`;
                 }}
                 contentContainerStyle={styles.userListContainer}
+                // Add extraData prop to force re-render when following changes
+                extraData={[following, refreshKey]}
+                key={`following-list-${refreshKey}`}
               />
             )}
           </SafeAreaLayout>
@@ -1173,6 +1379,7 @@ const styles = StyleSheet.create({
   userItemActionText: {
     color: '#fff',
     fontWeight: '600',
+    // backgroundColor : "#4b0082",
     fontSize: 14,
   },
   actionButtonsContainer: {
@@ -1190,7 +1397,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4B0082',
   },
   unfollowButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#4b0082',
   },
   requestedButton: {
     backgroundColor: '#e0e0e0',
@@ -1204,6 +1411,16 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontWeight: '600',
+    // backgroundColor : "#4b0082",
     fontSize: 14,
+  },
+  followBackButton: {
+    backgroundColor: '#6A0DAD', // Slightly different purple to distinguish from regular follow
+  },
+  messageButton: {
+    backgroundColor: '#1E90FF', // Sky blue color for message button
+  },
+  errorButton: {
+    backgroundColor: '#ff4444',
   },
 });
