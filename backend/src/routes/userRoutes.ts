@@ -16,6 +16,7 @@ import {
   rejectFollowRequest,
   removeFollower,
   blockUser,
+  getAllUsers,
 } from '../controllers/userController';
 import { auth } from '../middleware/auth';
 import multer from 'multer';
@@ -53,6 +54,11 @@ const upload = multer({
 
 // All routes in this file are protected with authentication
 router.use(auth);
+
+// @route   GET /api/users
+// @desc    Get all users
+// @access  Private
+router.get('/', getAllUsers);
 
 // @route   GET /api/users/search
 // @desc    Search users
