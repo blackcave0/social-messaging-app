@@ -16,7 +16,7 @@ import userRoutes from './routes/userRoutes';
 import postRoutes from './routes/postRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 // import storyRoutes from './routes/storyRoutes';
-// import chatRoutes from './routes/chatRoutes';
+import chatRoutes from './routes/chatRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -31,7 +31,11 @@ const io = new SocketIoServer(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Create uploads directory if it doesn't exist
@@ -53,7 +57,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api/stories', storyRoutes);
-// app.use('/api/chat', chatRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Default route
 app.get('/', (req: Request, res: Response) => {
