@@ -37,41 +37,45 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Check if users follow each other
-    const currentUser = await User.findById(req.user._id);
-    
-    // Check if current user follows the other user
-    const userFollowsOther = currentUser?.following.some(followingId => 
-      followingId.toString() === userId
-    );
-    
-    // Check if other user follows the current user
-    const otherFollowsUser = otherUser.following.some(followingId => 
-      followingId.toString() === req.user._id.toString()
-    );
-
-    if (!userFollowsOther || !otherFollowsUser) {
-      return res.status(403).json({ 
-        message: 'You can only chat with users who follow you and whom you follow back',
-        userFollowsOther,
-        otherFollowsUser
-      });
-    }
-
-    // Check if conversation already exists
+    // First check if conversation already exists
     let conversation = await Conversation.findOne({
-      participants: { $all: [req.user._id, userId] },
+      participants: { $all: [req.user._id, new mongoose.Types.ObjectId(userId)] }
     })
       .populate('participants', '_id username name profilePicture')
       .populate('lastMessage');
 
     // If not, create a new conversation
     if (!conversation) {
-      conversation = new Conversation({
-        participants: [req.user._id, userId],
-      });
-      await conversation.save();
-      await conversation.populate('participants', '_id username name profilePicture');
+      try {
+        conversation = new Conversation({
+          participants: [req.user._id, new mongoose.Types.ObjectId(userId)],
+        });
+        await conversation.save();
+        await conversation.populate('participants', '_id username name profilePicture');
+      } catch (err: any) {
+        console.log('Conversation creation error:', err);
+        
+        // If there's a duplicate key error, try to fetch the conversation again
+        if (err.code === 11000) {
+          // Wait a moment to ensure the database has completed any pending writes
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          conversation = await Conversation.findOne({
+            $or: [
+              { participants: { $all: [req.user._id, new mongoose.Types.ObjectId(userId)] } },
+              { participants: { $all: [new mongoose.Types.ObjectId(userId), req.user._id] } }
+            ]
+          })
+            .populate('participants', '_id username name profilePicture')
+            .populate('lastMessage');
+            
+          if (!conversation) {
+            return res.status(500).json({ message: 'Failed to get or create conversation' });
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     res.json(conversation);
@@ -99,37 +103,39 @@ export const sendMessage = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Recipient not found' });
     }
 
-    // Check if users follow each other
-    const currentUser = await User.findById(req.user._id);
-    
-    // Check if current user follows the recipient
-    const userFollowsOther = currentUser?.following.some(followingId => 
-      followingId.toString() === recipientId
-    );
-    
-    // Check if recipient follows the current user
-    const otherFollowsUser = recipient.following.some(followingId => 
-      followingId.toString() === req.user._id.toString()
-    );
-
-    if (!userFollowsOther || !otherFollowsUser) {
-      return res.status(403).json({ 
-        message: 'You can only chat with users who follow you and whom you follow back',
-        userFollowsOther,
-        otherFollowsUser
-      });
-    }
-
     // Get or create conversation
     let conversation = await Conversation.findOne({
-      participants: { $all: [req.user._id, recipientId] },
+      participants: { $all: [req.user._id, new mongoose.Types.ObjectId(recipientId)] }
     });
 
     if (!conversation) {
-      conversation = new Conversation({
-        participants: [req.user._id, recipientId],
-      });
-      await conversation.save();
+      try {
+        conversation = new Conversation({
+          participants: [req.user._id, new mongoose.Types.ObjectId(recipientId)],
+        });
+        await conversation.save();
+      } catch (err: any) {
+        console.log('Conversation creation error in sendMessage:', err);
+        
+        // If there's a duplicate key error, try to fetch the conversation again
+        if (err.code === 11000) {
+          // Wait a moment to ensure the database has completed any pending writes
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          conversation = await Conversation.findOne({
+            $or: [
+              { participants: { $all: [req.user._id, new mongoose.Types.ObjectId(recipientId)] } },
+              { participants: { $all: [new mongoose.Types.ObjectId(recipientId), req.user._id] } }
+            ]
+          });
+            
+          if (!conversation) {
+            return res.status(500).json({ message: 'Failed to get or create conversation' });
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Create new message
