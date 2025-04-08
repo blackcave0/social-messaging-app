@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import User from '../models/User';
@@ -34,6 +35,27 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
     const otherUser = await User.findById(userId);
     if (!otherUser) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if users follow each other
+    const currentUser = await User.findById(req.user._id);
+    
+    // Check if current user follows the other user
+    const userFollowsOther = currentUser?.following.some(followingId => 
+      followingId.toString() === userId
+    );
+    
+    // Check if other user follows the current user
+    const otherFollowsUser = otherUser.following.some(followingId => 
+      followingId.toString() === req.user._id.toString()
+    );
+
+    if (!userFollowsOther || !otherFollowsUser) {
+      return res.status(403).json({ 
+        message: 'You can only chat with users who follow you and whom you follow back',
+        userFollowsOther,
+        otherFollowsUser
+      });
     }
 
     // Check if conversation already exists
@@ -77,6 +99,27 @@ export const sendMessage = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Recipient not found' });
     }
 
+    // Check if users follow each other
+    const currentUser = await User.findById(req.user._id);
+    
+    // Check if current user follows the recipient
+    const userFollowsOther = currentUser?.following.some(followingId => 
+      followingId.toString() === recipientId
+    );
+    
+    // Check if recipient follows the current user
+    const otherFollowsUser = recipient.following.some(followingId => 
+      followingId.toString() === req.user._id.toString()
+    );
+
+    if (!userFollowsOther || !otherFollowsUser) {
+      return res.status(403).json({ 
+        message: 'You can only chat with users who follow you and whom you follow back',
+        userFollowsOther,
+        otherFollowsUser
+      });
+    }
+
     // Get or create conversation
     let conversation = await Conversation.findOne({
       participants: { $all: [req.user._id, recipientId] },
@@ -101,7 +144,7 @@ export const sendMessage = async (req: Request, res: Response) => {
 
     const savedMessage = await newMessage.save();
     // Update last message in conversation
-    conversation.lastMessage = savedMessage._id as any;
+    conversation.lastMessage = savedMessage._id;
     await conversation.save();
 
     // Populate sender and recipient info
@@ -172,14 +215,28 @@ export const getMessages = async (req: Request, res: Response) => {
 // @access  Private
 export const getUnreadCount = async (req: Request, res: Response) => {
   try {
+    // Make sure req.user._id is valid
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Ensure user ID is a valid ObjectId
+    const userId = req.user._id.toString();
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
     const unreadCount = await Message.countDocuments({
-      recipient: req.user._id,
+      recipient: userId,
       read: false,
     });
 
     res.json({ unreadCount });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get unread count error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 }; 
