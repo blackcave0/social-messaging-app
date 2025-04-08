@@ -18,15 +18,26 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthContext } from '../context/AuthContext';
 
+// Define user type to include the properties we need
+interface AppUser {
+  _id: string;
+  token?: string;
+  following?: string[];
+  friendRequests?: string[];
+}
+
 interface SearchResult {
   _id: string;
   username: string;
   name: string;
   profilePicture: string;
+  isFollowing?: boolean;
+  hasSentRequest?: boolean;
+  hasReceivedRequest?: boolean;
 }
 
 const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
-  const { user } = useAuthContext();
+  const { user } = useAuthContext() as { user: AppUser | null };
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -89,7 +100,71 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
       });
 
       console.log(`Search results count: ${response.data.length}`);
-      setResults(response.data);
+
+      // Get friend requests to check status
+      let friendRequests: string[] = [];
+      try {
+        const requestsResponse = await axios.get(`${API_URL}/api/users/friend-requests`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+        friendRequests = requestsResponse.data.map((req: any) => req._id);
+      } catch (err) {
+        console.log('Could not fetch friend requests, continuing without this data');
+      }
+
+      // Get sent friend requests (check endpoint implementation)
+      let sentFriendRequests: string[] = [];
+      try {
+        // This assumes the API has an endpoint to get sent friend requests
+        // If it doesn't exist, we'll catch the error and continue
+        const sentRequestsResponse = await axios.get(`${API_URL}/api/users/sent-requests`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+        sentFriendRequests = sentRequestsResponse.data || [];
+      } catch (err) {
+        console.log('Could not fetch sent requests, continuing without this data');
+
+        // Fallback approach if the API doesn't support getting sent requests
+        // Get all users and look for those with our ID in their friendRequests array
+        try {
+          console.log('Trying alternative approach to fetch sent requests');
+          // This is not ideal for production as it fetches all users
+          // but it's a workaround for testing/demo purposes
+          const allUsersResponse = await axios.get(`${API_URL}/api/users`, {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+            },
+          });
+
+          // For each search result, check if they have our user ID in their friendRequests
+          const searchResultIds = response.data.map((r: any) => r._id);
+          sentFriendRequests = allUsersResponse.data
+            .filter((u: any) =>
+              searchResultIds.includes(u._id) &&
+              u.friendRequests &&
+              u.friendRequests.includes(user._id)
+            )
+            .map((u: any) => u._id);
+        } catch (fetchErr) {
+          console.log('Alternative approach also failed:', fetchErr);
+        }
+      }
+
+      // Enhance search results with relationship status
+      const enhancedResults = response.data.map((result: SearchResult) => {
+        return {
+          ...result,
+          isFollowing: user.following?.includes(result._id) || false,
+          hasReceivedRequest: friendRequests.includes(result._id) || false,
+          hasSentRequest: sentFriendRequests.includes(result._id) || false
+        };
+      });
+
+      setResults(enhancedResults);
     } catch (error: any) {
       console.error('Error searching users:', error);
 
@@ -144,6 +219,35 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
     }
   };
 
+  // Function to accept friend request
+  const acceptFriendRequest = async (userId: string) => {
+    if (!user?.token) {
+      Alert.alert('Error', 'You need to be logged in to accept friend requests');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/accept-request`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        }
+      );
+
+      Alert.alert('Success', 'Friend request accepted');
+
+      // Refresh search results
+      searchUsers(searchQuery);
+    } catch (error: any) {
+      console.error('Error accepting friend request:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to accept friend request';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
   const handleClearSearch = () => {
     setSearchQuery('');
     setResults([]);
@@ -164,6 +268,14 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
     });
   };
 
+  const handleMessageUser = (user: SearchResult) => {
+    // Navigate to the Chat screen with this user
+    (navigation as any).navigate('Chat', {
+      userId: user._id,
+      name: user.name || user.username
+    });
+  };
+
   const renderSearchResult = ({ item }: { item: SearchResult }) => (
     <TouchableOpacity
       style={styles.resultItem}
@@ -181,12 +293,38 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.followButton}
-        onPress={() => sendFriendRequest(item._id)}
-      >
-        <Text style={styles.followButtonText}>Follow</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonContainer}>
+        {item.isFollowing ? (
+          <TouchableOpacity style={styles.followingButton} disabled>
+            <Text style={styles.followingButtonText}>Following</Text>
+          </TouchableOpacity>
+        ) : item.hasSentRequest ? (
+          <TouchableOpacity style={styles.pendingButton} disabled>
+            <Text style={styles.pendingButtonText}>Requested</Text>
+          </TouchableOpacity>
+        ) : item.hasReceivedRequest ? (
+          <TouchableOpacity
+            style={styles.acceptButton}
+            onPress={() => acceptFriendRequest(item._id)}
+          >
+            <Text style={styles.acceptButtonText}>Accept</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.followButton}
+            onPress={() => sendFriendRequest(item._id)}
+          >
+            <Text style={styles.followButtonText}>Follow</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={styles.messageButton}
+          onPress={() => handleMessageUser(item)}
+        >
+          <Text style={styles.messageButtonText}>Message</Text>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 
@@ -324,11 +462,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   followButton: {
-    backgroundColor: '#405DE6',
+    backgroundColor: '#3897F0', // Instagram blue
     paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 5,
+    paddingVertical: 7,
+    borderRadius: 4,
   },
   followButtonText: {
     color: '#FFFFFF',
@@ -377,6 +520,52 @@ const styles = StyleSheet.create({
   recentText: {
     flex: 1,
     fontSize: 16,
+  },
+  followingButton: {
+    backgroundColor: '#EFEFEF', // Light gray (Instagram style)
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+    borderRadius: 4,
+  },
+  followingButtonText: {
+    color: '#000',
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  pendingButton: {
+    backgroundColor: '#EFEFEF',
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+    borderRadius: 4,
+  },
+  pendingButtonText: {
+    color: '#000',
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  acceptButton: {
+    backgroundColor: '#3897F0', // Instagram blue
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+    borderRadius: 4,
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  messageButton: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
+  },
+  messageButtonText: {
+    color: '#000',
+    fontWeight: '500',
+    fontSize: 14,
   },
 });
 
