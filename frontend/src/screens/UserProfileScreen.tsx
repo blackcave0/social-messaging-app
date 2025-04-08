@@ -88,6 +88,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   const [showFollowingModal, setShowFollowingModal] = useState(false);
   const [followers, setFollowers] = useState<UserData[]>([]);
   const [following, setFollowing] = useState<UserData[]>([]);
+  const [showUserMenu, setShowUserMenu] = useState<string | null>(null);
 
   // Replace old relationship state with a single relationship object
   const [relationship, setRelationship] = useState<UserRelationship>({
@@ -429,6 +430,78 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   };
 
+  const handleRemoveFollower = async (userId: string) => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to remove followers');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/remove-follower`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowedBy: false
+        }));
+        Alert.alert('Success', 'Follower removed successfully');
+        // Refresh data
+        fetchUserProfile();
+        fetchRelationshipStatus();
+      }
+    } catch (error: any) {
+      console.error('Error removing follower:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to remove follower';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const handleBlockUser = async (userId: string) => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to block users');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/block`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowing: false,
+          isFollowedBy: false,
+          hasSentRequest: false,
+          hasReceivedRequest: false
+        }));
+        Alert.alert('Success', 'User blocked successfully');
+        // Go back to previous screen
+        nav.goBack();
+      }
+    } catch (error: any) {
+      console.error('Error blocking user:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to block user';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
   const renderPostItem = ({ item }: { item: PostDisplay }) => (
     <TouchableOpacity
       style={styles.postItem}
@@ -453,29 +526,58 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const renderUserItem = ({ item }: { item: UserData }) => (
-    <TouchableOpacity
-      style={styles.userItem}
-      onPress={() => {
-        // Close the modal first
-        setShowFollowersModal(false);
-        setShowFollowingModal(false);
+    <View style={styles.userItemContainer}>
+      <TouchableOpacity
+        style={styles.userItem}
+        onPress={() => {
+          setShowFollowersModal(false);
+          setShowFollowingModal(false);
+          navigation.navigate('UserProfile', {
+            userId: item._id,
+            fromFollowRequest: false
+          });
+        }}
+      >
+        <Image
+          source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
+          style={styles.userAvatar}
+        />
+        <View style={styles.userInfo}>
+          <Text style={styles.username}>@{item.username}</Text>
+          <Text style={styles.name}>{item.name}</Text>
+        </View>
+      </TouchableOpacity>
 
-        // Then navigate to the user's profile
-        navigation.navigate('UserProfile', {
-          userId: item._id,
-          fromFollowRequest: false
-        });
-      }}
-    >
-      <Image
-        source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
-        style={styles.userAvatar}
-      />
-      <View style={styles.userInfo}>
-        <Text style={styles.username}>@{item.username}</Text>
-        <Text style={styles.name}>{item.name}</Text>
-      </View>
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.menuButton}
+        onPress={() => setShowUserMenu(showUserMenu === item._id ? null : item._id)}
+      >
+        <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+      </TouchableOpacity>
+
+      {showUserMenu === item._id && (
+        <View style={styles.menuContainer}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              setShowUserMenu(null);
+              handleRemoveFollower(item._id);
+            }}
+          >
+            <Text style={styles.menuItemText}>Remove</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              setShowUserMenu(null);
+              handleBlockUser(item._id);
+            }}
+          >
+            <Text style={[styles.menuItemText, styles.blockText]}>Block</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   if (loading && !refreshing) {
@@ -525,8 +627,42 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Ionicons name="arrow-back" size={24} color="#333" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>{user?.username || 'User Profile'}</Text>
-              <View style={styles.headerRight} />
+              {userId !== currentUser?._id && (
+                <TouchableOpacity
+                  style={styles.optionsButton}
+                  onPress={() => setShowUserMenu(showUserMenu ? null : userId)}
+                >
+                  <Ionicons name="ellipsis-vertical" size={24} color="#333" />
+                </TouchableOpacity>
+              )}
             </View>
+
+            {showUserMenu && userId !== currentUser?._id && (
+              <View style={styles.userOptionsMenu}>
+                {relationship.isFollowedBy && (
+                  <TouchableOpacity
+                    style={styles.userOptionItem}
+                    onPress={() => {
+                      handleRemoveFollower(userId);
+                      setShowUserMenu(null);
+                    }}
+                  >
+                    <Ionicons name="person-remove" size={20} color="#333" />
+                    <Text style={styles.userOptionText}>Remove Follower</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.userOptionItem}
+                  onPress={() => {
+                    handleBlockUser(userId);
+                    setShowUserMenu(null);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#ff4444" />
+                  <Text style={[styles.userOptionText, styles.blockText]}>Block User</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.profileContainer}>
               <Image
@@ -758,6 +894,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EFEFEF',
+    position: 'relative',
   },
   backButton: {
     padding: 5,
@@ -766,9 +903,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
+    textAlign: 'center',
   },
-  headerRight: {
-    width: 30,
+  optionsButton: {
+    padding: 5,
+    position: 'absolute',
+    right: 10,
   },
   profileContainer: {
     flexDirection: 'row',
@@ -976,6 +1117,9 @@ const styles = StyleSheet.create({
   modalList: {
     padding: 10,
   },
+  userItemContainer: {
+    position: 'relative',
+  },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1005,6 +1149,64 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  menuButton: {
+    position: 'absolute',
+    right: 10,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    padding: 5,
+  },
+  menuContainer: {
+    position: 'absolute',
+    right: 10,
+    top: 40,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  menuItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  menuItemText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  blockText: {
+    color: '#ff4444',
+  },
+  userOptionsMenu: {
+    position: 'absolute',
+    right: 10,
+    top: 50,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 1000,
+    width: 200,
+  },
+  userOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  userOptionText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 10,
   },
 });
 
