@@ -281,4 +281,277 @@ export const searchUsers = async (req: Request, res: Response) => {
     console.error('Search users error:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+// @desc    Get sent friend requests
+// @route   GET /api/users/sent-requests
+// @access  Private
+export const getSentFriendRequests = async (req: Request, res: Response) => {
+  try {
+    console.log(`Getting sent friend requests for user: ${req.user._id}`);
+    
+    // Find all users who have the current user's ID in their friendRequests array
+    const usersWithPendingRequests = await User.find({
+      friendRequests: { $in: [req.user._id] }
+    }).select('_id username name profilePicture');
+
+    console.log(`Found ${usersWithPendingRequests.length} users with pending requests from current user`);
+    
+    // Return just the user IDs as an array if that's what the frontend expects
+    const userIds = usersWithPendingRequests.map(user => user._id);
+    res.json(userIds);
+  } catch (error) {
+    console.error('Get sent friend requests error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Follow a user directly (without friend request)
+// @route   POST /api/users/:id/follow
+// @access  Private
+export const followUser = async (req: Request, res: Response) => {
+  try {
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: 'Cannot follow yourself' });
+    }
+
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
+
+    // Check if already following
+    const targetUserId = new mongoose.Types.ObjectId(req.params.id);
+    if (currentUser.following.some((id: mongoose.Types.ObjectId) => id.equals(targetUserId))) {
+      return res.status(400).json({ message: 'Already following this user' });
+    }
+
+    // Add to followers and following
+    currentUser.following.push(targetUserId);
+    targetUser.followers.push(req.user._id);
+
+    await currentUser.save();
+    await targetUser.save();
+
+    // Create notification for the follow
+    await createNotification(
+      targetUser._id.toString(),
+      currentUser._id.toString(),
+      'follow'
+    );
+
+    res.json({ 
+      success: true,
+      message: 'User followed successfully',
+      followingCount: currentUser.following.length,
+      followersCount: targetUser.followers.length
+    });
+  } catch (error) {
+    console.error('Follow user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Unfollow a user
+// @route   POST /api/users/:id/unfollow
+// @access  Private
+export const unfollowUser = async (req: Request, res: Response) => {
+  try {
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: 'Cannot unfollow yourself' });
+    }
+
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
+
+    // Check if actually following
+    const targetUserId = new mongoose.Types.ObjectId(req.params.id);
+    if (!currentUser.following.some((id: mongoose.Types.ObjectId) => id.equals(targetUserId))) {
+      return res.status(400).json({ message: 'Not following this user' });
+    }
+
+    // Remove from followers and following
+    currentUser.following = currentUser.following.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(targetUserId)
+    );
+    
+    targetUser.followers = targetUser.followers.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(req.user._id)
+    );
+
+    await currentUser.save();
+    await targetUser.save();
+
+    res.json({ 
+      success: true,
+      message: 'User unfollowed successfully',
+      followingCount: currentUser.following.length,
+      followersCount: targetUser.followers.length
+    });
+  } catch (error) {
+    console.error('Unfollow user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get relationship status between current user and target user
+// @route   GET /api/users/:id/relationship
+// @access  Private
+export const getUserRelationship = async (req: Request, res: Response) => {
+  try {
+    const currentUserId = req.user._id;
+    const targetUserId = req.params.id;
+    
+    if (currentUserId.toString() === targetUserId) {
+      return res.status(400).json({ message: 'Cannot check relationship with yourself' });
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'Current user not found' });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
+
+    // Convert to ObjectId for comparison
+    const targetUserObjectId = new mongoose.Types.ObjectId(targetUserId);
+    const currentUserObjectId = new mongoose.Types.ObjectId(currentUserId);
+
+    // Check relationship
+    const isFollowing = currentUser.following.some((id: mongoose.Types.ObjectId) => 
+      id.equals(targetUserObjectId)
+    );
+    
+    const isFollowedBy = currentUser.followers.some((id: mongoose.Types.ObjectId) => 
+      id.equals(targetUserObjectId)
+    );
+    
+    const hasReceivedRequest = currentUser.friendRequests.some((id: mongoose.Types.ObjectId) => 
+      id.equals(targetUserObjectId)
+    );
+    
+    const hasSentRequest = targetUser.friendRequests.some((id: mongoose.Types.ObjectId) => 
+      id.equals(currentUserObjectId)
+    );
+
+    res.json({
+      success: true,
+      relationship: {
+        isFollowing,
+        isFollowedBy,
+        hasReceivedRequest,
+        hasSentRequest
+      }
+    });
+  } catch (error) {
+    console.error('Get user relationship error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Accept follow request
+// @route   POST /api/users/:id/accept-follow-request
+// @access  Private
+export const acceptFollowRequest = async (req: Request, res: Response) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const requestingUser = await User.findById(req.params.id);
+    if (!requestingUser) {
+      return res.status(404).json({ message: 'Requesting user not found' });
+    }
+
+    // Convert param ID to ObjectId
+    const requestingUserId = new mongoose.Types.ObjectId(req.params.id);
+
+    // Check if there's a friend request to accept
+    if (!currentUser.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(requestingUserId))) {
+      return res.status(400).json({ message: 'No follow request from this user' });
+    }
+
+    // Remove from friend requests
+    currentUser.friendRequests = currentUser.friendRequests.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(requestingUserId)
+    );
+
+    // Add to followers
+    currentUser.followers.push(requestingUserId);
+    requestingUser.following.push(req.user._id);
+
+    await currentUser.save();
+    await requestingUser.save();
+
+    // Create notification for the accepted follow request
+    await createNotification(
+      requestingUser._id.toString(),
+      currentUser._id.toString(),
+      'follow'
+    );
+
+    // Return the updated user object for the requester
+    const user = await User.findById(requestingUser._id)
+      .select('_id username name profilePicture');
+
+    res.json({ 
+      success: true, 
+      message: 'Follow request accepted',
+      user
+    });
+  } catch (error) {
+    console.error('Accept follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Reject follow request
+// @route   POST /api/users/:id/reject-follow-request
+// @access  Private
+export const rejectFollowRequest = async (req: Request, res: Response) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Convert param ID to ObjectId
+    const requestingUserId = new mongoose.Types.ObjectId(req.params.id);
+
+    // Check if there's a friend request to reject
+    if (!currentUser.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(requestingUserId))) {
+      return res.status(400).json({ message: 'No follow request from this user' });
+    }
+
+    // Remove from friend requests
+    currentUser.friendRequests = currentUser.friendRequests.filter(
+      (id: mongoose.Types.ObjectId) => !id.equals(requestingUserId)
+    );
+
+    await currentUser.save();
+
+    res.json({
+      success: true, 
+      message: 'Follow request rejected'
+    });
+  } catch (error) {
+    console.error('Reject follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }; 
