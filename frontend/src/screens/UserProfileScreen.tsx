@@ -421,10 +421,9 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleSendMessage = () => {
-    // Since there's no Chat tab in the main navigation,
-    // we'll directly navigate to the Chat screen
-    // We'll use any to bypass type checking for now
+    // Navigate to the Chat screen
     (navigation as any).navigate('Chat', {
+      chatId: userId,
       userId: userId,
       name: user?.name || user?.username || 'User'
     });
