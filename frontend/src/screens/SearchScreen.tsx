@@ -271,6 +271,7 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
   const handleMessageUser = (user: SearchResult) => {
     // Navigate to the Chat screen with this user
     (navigation as any).navigate('Chat', {
+      chatId: user._id,
       userId: user._id,
       name: user.name || user.username
     });
