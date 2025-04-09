@@ -17,6 +17,8 @@ import {
   removeFollower,
   blockUser,
   getAllUsers,
+  getUserFollowers,
+  getUserFollowing
 } from '../controllers/userController';
 import { auth } from '../middleware/auth';
 import multer from 'multer';
@@ -139,5 +141,15 @@ router.post('/:id/remove-follower', removeFollower);
 // @desc    Block a user
 // @access  Private
 router.post('/:id/block', blockUser);
+
+// @route   GET /api/users/:id/followers
+// @desc    Get user's followers
+// @access  Private
+router.get('/:id/followers', getUserFollowers);
+
+// @route   GET /api/users/:id/following
+// @desc    Get user's following
+// @access  Private
+router.get('/:id/following', getUserFollowing);
 
 export default router; 
