@@ -25,6 +25,7 @@ type RootStackParamList = {
   UserProfile: {
     userId: string;
     fromFollowRequest?: boolean;
+    userName?: string;
   };
   // Add other screen params as needed
 };
@@ -41,6 +42,7 @@ interface UserData {
   followers?: string[];
   friendRequests?: string[];
   token?: string;
+  userName?: string;
 }
 
 interface UserRelationship {
@@ -73,10 +75,15 @@ interface PostDisplay {
 type PossibleNavigation = {
   navigate: (screen: string, params?: any) => void;
   goBack: () => void;
+  push: (screen: string, params?: any) => void;
+  popToTop: () => void;
 };
 
 const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
+  // Destructure only the parameters we know exist in the type definition
   const { userId, fromFollowRequest } = route.params;
+  // Safely access userName with optional chaining
+  const userName = route.params?.userName;
   const { user: currentUser } = useAuthContext() as { user: UserData | null };
   const [user, setUser] = useState<UserData | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -196,10 +203,18 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (response.data.success) {
         setFollowers(response.data.followers);
+        console.log('Followers loaded:', response.data.followers.length);
       }
     } catch (error: any) {
       console.error('Error fetching followers:', error);
-      Alert.alert('Error', 'Failed to load followers');
+      // Only show alert for non-404 errors
+      if (error.response && error.response.status !== 404) {
+        Alert.alert('Error', 'Failed to load followers');
+      } else {
+        // If 404, just set empty followers array
+        console.log('No followers found or endpoint not available');
+        setFollowers([]);
+      }
     }
   };
 
@@ -218,10 +233,18 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (response.data.success) {
         setFollowing(response.data.following);
+        console.log('Following loaded:', response.data.following.length);
       }
     } catch (error: any) {
       console.error('Error fetching following:', error);
-      Alert.alert('Error', 'Failed to load following');
+      // Only show alert for non-404 errors
+      if (error.response && error.response.status !== 404) {
+        Alert.alert('Error', 'Failed to load following');
+      } else {
+        // If 404, just set empty following array
+        console.log('No following found or endpoint not available');
+        setFollowing([]);
+      }
     }
   };
 
@@ -505,11 +528,47 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     <TouchableOpacity
       style={styles.postItem}
       onPress={() => {
-        // Use the cast navigation
-        nav.navigate('Home', {
-          screen: 'PostDetails',
-          params: { postId: item._id }
-        });
+        // Find the best way to navigate to PostDetails based on the current navigation state
+        if (nav.navigate) {
+          try {
+            // When in the root stack, navigate to PostDetails directly
+            if (route.name === 'UserProfile') {
+              console.log('Navigating from root UserProfile to PostDetails in HomeStack');
+              nav.navigate('Main', {
+                screen: 'Home',
+                params: {
+                  screen: 'PostDetails',
+                  params: {
+                    postId: item._id,
+                    userId,
+                    userName: user?.name || user?.username || 'User'
+                  }
+                }
+              });
+            } else {
+              // When in a nested stack (like inside Home), navigate to PostDetails in that stack
+              console.log('Navigating to PostDetails within the current stack');
+              nav.navigate('PostDetails', {
+                postId: item._id,
+                userId,
+                userName: user?.name || user?.username || 'User'
+              });
+            }
+          } catch (err) {
+            console.error('Navigation error:', err);
+
+            // Fallback navigation through the root navigator if nested fails
+            console.log('Using fallback navigation to PostDetails');
+            nav.navigate('Home', {
+              screen: 'PostDetails',
+              params: {
+                postId: item._id,
+                userId,
+                userName: user?.name || user?.username || 'User'
+              }
+            });
+          }
+        }
       }}
     >
       {item.imageUrl ? (
