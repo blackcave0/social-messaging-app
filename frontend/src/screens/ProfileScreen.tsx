@@ -605,7 +605,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           // This follower is also being followed by you - show Message button
           return (
             <TouchableOpacity
-              style={[styles.actionButton, styles.messageButton]}
+              style={[styles.actionButton, styles.messageBubbleButton]}
               onPress={() => handleMessage(item._id)}
             >
               <Text style={styles.actionButtonText}>Message</Text>
@@ -815,6 +815,16 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   const handleSettings = () => {
     navigation.navigate('Settings');
   };
+
+  const handleMessages = () => {
+    // Use the root navigation instead of the stack navigation for proper navigation to ChatList
+    const rootNavigation = navigation.getParent();
+    if (rootNavigation) {
+      rootNavigation.navigate('ChatList');
+    } else {
+      console.error('Could not access root navigation');
+    }
+  };
   // --- End of original functions ---
 
 
@@ -881,11 +891,13 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           />
         }
         ListHeaderComponent={
-          // --- Keep the existing Header structure ---
           <>
             <View style={styles.header}>
               <TouchableOpacity style={styles.settingsButton} onPress={handleSettings}>
                 <Ionicons name="settings-outline" size={24} color="#333" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.messageButton} onPress={handleMessages}>
+                <Ionicons name="chatbubbles-outline" size={24} color="#333" />
               </TouchableOpacity>
             </View>
             <View style={styles.profileContainer}>
@@ -952,7 +964,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               )}
             </View>
           </>
-          // --- End of Header structure ---
         }
         // Apply padding to the container that holds the grid items
         contentContainerStyle={styles.postsGridContainer}
@@ -1236,6 +1247,11 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     padding: 5,
+    marginLeft: 10,
+  },
+  messageButton: {
+    padding: 5,
+    marginLeft: 10,
   },
   // Style for the FlatList content container
   postsGridContainer: {
@@ -1411,16 +1427,22 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontWeight: '600',
-    // backgroundColor : "#4b0082",
     fontSize: 14,
   },
   followBackButton: {
     backgroundColor: '#6A0DAD', // Slightly different purple to distinguish from regular follow
   },
-  messageButton: {
+  messageBubbleButton: {
     backgroundColor: '#1E90FF', // Sky blue color for message button
   },
   errorButton: {
     backgroundColor: '#ff4444',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    padding: 5,
   },
 });
