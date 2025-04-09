@@ -1,22 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
   TouchableOpacity,
-  ScrollView,
-  TextInput,
+  FlatList,
+  // TextInput, // Removed as comment input is not per-post here
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform
+  // KeyboardAvoidingView, // Not needed without the bottom input
+  Platform,
+  SafeAreaView, // Use SafeAreaView
+  RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { API_URL, DEFAULT_AVATAR } from '../utils/config';
 import axios from 'axios';
+import { RootStackScreenProps } from '../types/navigation';
 
+type Props = RootStackScreenProps<'PostDetails'>; // Keep type, but screen content changed
+
+// Interfaces remain the same
 interface Comment {
   _id: string;
   text: string;
@@ -31,8 +37,8 @@ interface Comment {
 
 interface Post {
   _id: string;
-  text: string;
-  image?: string;
+  description: string;
+  images: string[];
   user: {
     _id: string;
     username: string;
@@ -44,304 +50,81 @@ interface Post {
   createdAt: string;
 }
 
-interface PostDetailsScreenProps {
-  route: {
-    params: {
-      postId: string;
-    }
-  };
-  navigation: any;
-}
-
-const getMockPostDetails = (postId: string): Post => {
-  const mockPosts = {
-    '1': {
-      _id: '1',
-      text: 'Just launched the new social messaging app! 🚀 What do you think?',
-      image: 'https://picsum.photos/id/1/500/300',
-      user: {
-        _id: '101',
-        username: 'sarah_dev',
-        name: 'Sarah Johnson',
-        profilePicture: 'https://randomuser.me/api/portraits/women/22.jpg'
-      },
-      likes: ['102', '103'],
-      comments: [
-        {
-          _id: 'comment1',
-          text: 'This looks amazing! Can\'t wait to try it out.',
-          user: {
-            _id: '102',
-            username: 'mike_design',
-            name: 'Mike Wilson',
-            profilePicture: 'https://randomuser.me/api/portraits/men/32.jpg'
-          },
-          createdAt: new Date(Date.now() - 1800000).toISOString() // 30 minutes ago
-        },
-        {
-          _id: 'comment2',
-          text: 'Is it available on iOS?',
-          user: {
-            _id: '103',
-            username: 'alex_nature',
-            name: 'Alex Green',
-            profilePicture: 'https://randomuser.me/api/portraits/women/44.jpg'
-          },
-          createdAt: new Date(Date.now() - 900000).toISOString() // 15 minutes ago
-        },
-        {
-          _id: 'comment3',
-          text: 'Great job on the UI!',
-          user: {
-            _id: '104',
-            username: 'bookworm',
-            name: 'Jamie Reed',
-            profilePicture: 'https://randomuser.me/api/portraits/men/67.jpg'
-          },
-          createdAt: new Date(Date.now() - 300000).toISOString() // 5 minutes ago
-        }
-      ],
-      createdAt: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
-    },
-    '2': {
-      _id: '2',
-      text: 'Working on some new design concepts for our mobile app. Feedback welcome!',
-      image: 'https://picsum.photos/id/26/500/300',
-      user: {
-        _id: '102',
-        username: 'mike_design',
-        name: 'Mike Wilson',
-        profilePicture: 'https://randomuser.me/api/portraits/men/32.jpg'
-      },
-      likes: ['101', '103'],
-      comments: [
-        {
-          _id: 'comment4',
-          text: 'Love the color scheme!',
-          user: {
-            _id: '101',
-            username: 'sarah_dev',
-            name: 'Sarah Johnson',
-            profilePicture: 'https://randomuser.me/api/portraits/women/22.jpg'
-          },
-          createdAt: new Date(Date.now() - 3000000).toISOString() // 50 minutes ago
-        },
-        {
-          _id: 'comment5',
-          text: 'Have you considered a dark mode?',
-          user: {
-            _id: '105',
-            username: 'coffee_lover',
-            name: 'Taylor Swift',
-            profilePicture: 'https://randomuser.me/api/portraits/women/73.jpg'
-          },
-          createdAt: new Date(Date.now() - 1200000).toISOString() // 20 minutes ago
-        }
-      ],
-      createdAt: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
-    },
-    '3': {
-      _id: '3',
-      text: 'Beautiful day for hiking! 🏞️ #nature #outdoors',
-      image: 'https://picsum.photos/id/15/500/300',
-      user: {
-        _id: '103',
-        username: 'alex_nature',
-        name: 'Alex Green',
-        profilePicture: 'https://randomuser.me/api/portraits/women/44.jpg'
-      },
-      likes: [],
-      comments: [],
-      createdAt: new Date(Date.now() - 10800000).toISOString() // 3 hours ago
-    },
-    '4': {
-      _id: '4',
-      text: 'Just finished reading an amazing book on AI and the future of technology. Highly recommend!',
-      user: {
-        _id: '104',
-        username: 'bookworm',
-        name: 'Jamie Reed',
-        profilePicture: 'https://randomuser.me/api/portraits/men/67.jpg'
-      },
-      likes: ['101'],
-      comments: [
-        {
-          _id: 'comment6',
-          text: 'What\'s the title? I\'ve been looking for a good tech book.',
-          user: {
-            _id: '101',
-            username: 'sarah_dev',
-            name: 'Sarah Johnson',
-            profilePicture: 'https://randomuser.me/api/portraits/women/22.jpg'
-          },
-          createdAt: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
-        }
-      ],
-      createdAt: new Date(Date.now() - 14400000).toISOString() // 4 hours ago
-    },
-    '5': {
-      _id: '5',
-      text: 'New coffee shop downtown is amazing! ☕',
-      image: 'https://picsum.photos/id/42/500/300',
-      user: {
-        _id: '105',
-        username: 'coffee_lover',
-        name: 'Taylor Swift',
-        profilePicture: 'https://randomuser.me/api/portraits/women/73.jpg'
-      },
-      likes: ['102', '103', '104'],
-      comments: [
-        {
-          _id: 'comment7',
-          text: 'What\'s it called? I need to check it out!',
-          user: {
-            _id: '102',
-            username: 'mike_design',
-            name: 'Mike Wilson',
-            profilePicture: 'https://randomuser.me/api/portraits/men/32.jpg'
-          },
-          createdAt: new Date(Date.now() - 10800000).toISOString() // 3 hours ago
-        },
-        {
-          _id: 'comment8',
-          text: 'Do they have good pastries too?',
-          user: {
-            _id: '103',
-            username: 'alex_nature',
-            name: 'Alex Green',
-            profilePicture: 'https://randomuser.me/api/portraits/women/44.jpg'
-          },
-          createdAt: new Date(Date.now() - 5400000).toISOString() // 1.5 hours ago
-        }
-      ],
-      createdAt: new Date(Date.now() - 18000000).toISOString() // 5 hours ago
-    }
-  };
-
-  return mockPosts[postId as keyof typeof mockPosts] || {
-    _id: postId,
-    text: 'Post not found',
-    user: {
-      _id: '999',
-      username: 'unknown',
-      name: 'Unknown User',
-      profilePicture: DEFAULT_AVATAR
-    },
-    likes: [],
-    comments: [],
-    createdAt: new Date().toISOString()
-  };
-};
-
-const PostDetailsScreen: React.FC<PostDetailsScreenProps> = ({ route, navigation }) => {
-  const { postId } = route.params;
+// This screen now functions more like a Feed or Post List
+const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
+  // postId from route.params might be unused here if showing all posts
+  const { postId: initialPostId } = route.params; // Renamed for clarity
   const { user } = useAuthContext();
-  const [post, setPost] = useState<Post | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]); // State holds the array of posts
   const [loading, setLoading] = useState(true);
-  const [commentText, setCommentText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Removed commentText and submitting state as there's no single comment input
 
-  useEffect(() => {
-    fetchPost();
-  }, [postId]);
-
-  const fetchPost = async () => {
+  // Fetch all posts
+  const fetchPosts = useCallback(async () => {
     try {
-      setLoading(true);
-      
-      // In a real app, we would fetch from the API
-      // const response = await axios.get(`${API_URL}/api/posts/${postId}`);
-      // setPost(response.data);
-      
-      // For testing, use mock data with a simulated delay
-      setTimeout(() => {
-        setPost(getMockPostDetails(postId));
-        setLoading(false);
-        setRefreshing(false);
-      }, 1000);
+      console.log('Requesting all posts from:', `${API_URL}/api/posts`);
+      // Assuming the endpoint returns { data: Post[] }
+      const response = await axios.get<{ data: Post[] }>(`${API_URL}/api/posts`);
+      console.log('Fetched all posts:', response.data.data.length);
+      setPosts(response.data.data); // Set the array of posts
     } catch (error) {
-      Alert.alert('Error', 'Failed to load post details');
-      console.error(error);
+      Alert.alert('Error', 'Failed to load posts');
+      console.error('Fetch posts error:', error);
+      // Handle specific error types if needed (e.g., network error, server error)
+    } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []); // No dependencies needed if fetching all posts
 
-  const handleLike = async () => {
-    if (!post || !user?._id) return;
-    
+  useEffect(() => {
+    setLoading(true);
+    fetchPosts();
+  }, [fetchPosts]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchPosts();
+  }, [fetchPosts]);
+
+  // Handle like action for a specific post in the list
+  const handleLike = async (postId: string) => {
+    if (!user?._id) return;
+
+    const postIndex = posts.findIndex(p => p._id === postId);
+    if (postIndex === -1) return;
+
+    const originalPosts = [...posts]; // Store original state
+    const post = originalPosts[postIndex];
+    const isLiked = post.likes.includes(user._id);
+    const updatedLikes = isLiked
+      ? post.likes.filter(id => id !== user._id)
+      : [...post.likes, user._id];
+
+    // Optimistic update
+    setPosts(prevPosts => {
+      const newPosts = [...prevPosts];
+      newPosts[postIndex] = { ...newPosts[postIndex], likes: updatedLikes };
+      return newPosts;
+    });
+
     try {
-      const isLiked = post.likes.includes(user._id);
-      const updatedLikes = isLiked
-        ? post.likes.filter(id => id !== user._id)
-        : [...post.likes, user._id];
-      
-      // Optimistic update
-      setPost(prev => prev ? {
-        ...prev,
-        likes: updatedLikes
-      } : null);
-      
-      // In a real app, we would call the API
-      // await axios.post(`${API_URL}/api/posts/${post._id}/like`);
-      
-      // Simulate API call delay
-      // setTimeout(() => {
-      //   // No need to do anything, we already updated the UI
-      // }, 500);
+      // *** IMPORTANT: Add your actual API call here ***
+      console.log(`Simulating API call: ${isLiked ? 'Unlike' : 'Like'} post ${postId}`);
+      // Example API call (uncomment and adapt)
+      // await axios.post(`${API_URL}/api/posts/${postId}/like`);
+      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
+
     } catch (error) {
-      // Revert on error
-      fetchPost();
-      Alert.alert('Error', 'Could not update like');
+      console.error('Failed to update like:', error);
+      Alert.alert('Error', 'Could not update like status.');
+      // Revert UI on error
+      setPosts(originalPosts);
     }
   };
 
-  const handleSubmitComment = async () => {
-    if (!commentText.trim() || !post || !user) return;
-    
-    try {
-      setSubmitting(true);
-      
-      // In a real app, we would call the API
-      // await axios.post(`${API_URL}/api/posts/${post._id}/comment`, {
-      //   text: commentText
-      // });
-      
-      // Simulate adding a comment
-      const newComment: Comment = {
-        _id: `temp-${Date.now()}`,
-        text: commentText,
-        user: {
-          _id: user._id,
-          username: user.username,
-          name: user.name,
-          profilePicture: user.profilePicture
-        },
-        createdAt: new Date().toISOString()
-      };
-      
-      // Update post with new comment
-      setPost(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          comments: [...prev.comments, newComment]
-        };
-      });
-      
-      setCommentText('');
-      
-      // Simulate API delay
-      setTimeout(() => {
-        setSubmitting(false);
-      }, 500);
-    } catch (error) {
-      Alert.alert('Error', 'Could not post comment');
-      setSubmitting(false);
-    }
-  };
-
+  // Navigate to User Profile or own Profile
   const handleUserPress = (userId: string) => {
     if (userId === user?._id) {
       navigation.navigate('Profile');
@@ -350,350 +133,270 @@ const PostDetailsScreen: React.FC<PostDetailsScreenProps> = ({ route, navigation
     }
   };
 
+  // Navigate to the actual Post Details screen when a post item is pressed
+  // (Assuming you have a screen dedicated to showing *one* post and its comments)
+  const handlePostPress = (postId: string) => {
+    // This navigation assumes you *also* have a screen (maybe the one from the previous refactor)
+    // actually named 'PostDetails' that shows a single post.
+    // If this *is* your main feed and you don't have a separate details screen, adjust accordingly.
+    navigation.navigate('PostDetails', { postId });
+  };
+
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    // Simple relative time or fallback to date string might be better for a feed
+    const now = new Date();
+    const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
+    const diffMinutes = Math.round(diffSeconds / 60);
+    const diffHours = Math.round(diffMinutes / 60);
+    const diffDays = Math.round(diffHours / 24);
+
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
     return date.toLocaleDateString('en-US', {
-      year: 'numeric',
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
     });
   };
 
-  if (loading) {
+  // Render a single post item within the FlatList
+  const renderPostItem = ({ item }: { item: Post }) => {
+    // console.log('Rendering post:', item._id, 'Image:', item.images?.[0]);
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4B0082" />
-      </View>
-    );
-  }
+      // Wrap item in TouchableOpacity to navigate on press
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => handlePostPress(item._id)}
+        style={styles.postContainer}
+      >
+        {/* Post Header */}
+        <View style={styles.postHeader}>
+          <TouchableOpacity
+            style={styles.userInfo}
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent post press when clicking user info
+              handleUserPress(item.user._id);
+            }}
+          >
+            <Image
+              source={{ uri: item.user.profilePicture || DEFAULT_AVATAR }}
+              style={styles.avatar}
+            />
+            <View>
+              <Text style={styles.userName}>{item.user.name}</Text>
+              <Text style={styles.userUsername}>@{item.user.username}</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.postDate}>{formatDate(item.createdAt)}</Text>
+        </View>
 
-  if (!post) {
+        {/* Post Content */}
+        <Text style={styles.postText} numberOfLines={4} ellipsizeMode="tail">
+          {item.description}
+        </Text>
+
+        {item.images && item.images.length > 0 && item.images[0] && (
+          <Image
+            source={{ uri: item.images[0] }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+        )}
+
+        {/* Post Actions */}
+        <View style={styles.postActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent post press when clicking like
+              handleLike(item._id);
+            }}
+          >
+            <Ionicons
+              name={item.likes.includes(user?._id || '') ? "heart" : "heart-outline"}
+              size={24}
+              color={item.likes.includes(user?._id || '') ? "#FF3B30" : "#666"}
+            />
+            <Text style={styles.actionText}>{item.likes.length}</Text>
+          </TouchableOpacity>
+
+          {/* Comment Action - Navigates to details on press */}
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent post press when clicking comment icon
+              handlePostPress(item._id); // Navigate to details to see/add comments
+            }}
+          >
+            <Ionicons name="chatbubble-outline" size={22} color="#666" />
+            <Text style={styles.actionText}>{item.comments.length}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // --- Render Logic ---
+
+  if (loading && posts.length === 0) { // Show full screen loader only on initial load
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color="#FF3B30" />
-        <Text style={styles.errorText}>Post not found</Text>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4B0082" />
+      </SafeAreaView>
     );
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-    >
-      <ScrollView style={styles.container}>
-        <View style={styles.postContainer}>
-          <View style={styles.postHeader}>
-            <TouchableOpacity 
-              style={styles.userInfo}
-              onPress={() => handleUserPress(post.user._id)}
-            >
-              <Image 
-                source={{ uri: post.user.profilePicture || DEFAULT_AVATAR }}
-                style={styles.avatar}
-              />
-              <View>
-                <Text style={styles.userName}>{post.user.name}</Text>
-                <Text style={styles.userUsername}>@{post.user.username}</Text>
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.postDate}>{formatDate(post.createdAt)}</Text>
-          </View>
-          
-          <Text style={styles.postText}>{post.text}</Text>
-          
-          {post.image && (
-            <Image 
-              source={{ uri: post.image }}
-              style={styles.postImage}
-              resizeMode="cover"
-            />
-          )}
-          
-          <View style={styles.postActions}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleLike}
-            >
-              <Ionicons 
-                name={post.likes.includes(user?._id || '') ? "heart" : "heart-outline"} 
-                size={24} 
-                color={post.likes.includes(user?._id || '') ? "#FF3B30" : "#666"}
-              />
-              <Text style={styles.actionText}>{post.likes.length}</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.actionButton}>
-              <Ionicons name="chatbubble-outline" size={22} color="#666" />
-              <Text style={styles.actionText}>{post.comments.length}</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <FlatList
+        data={posts}
+        renderItem={renderPostItem}
+        keyExtractor={(item) => item._id}
+        contentContainerStyle={styles.listContentContainer}
+        ItemSeparatorComponent={() => <View style={styles.separator} />} // Optional separator
+        // ListHeaderComponent={<View><Text>Start of Feed</Text></View>} // Example header
+        // ListFooterComponent={loading ? <ActivityIndicator/> : null} // Example footer loader for pagination
+        refreshControl={ // Pull-to-refresh
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#4B0082"]}
+            tintColor={"#4B0082"}
+          />
+        }
+        ListEmptyComponent={ // Show if fetch completes but posts array is empty
+          !loading ? (
+            <View style={styles.emptyListContainer}>
+              <Ionicons name="newspaper-outline" size={50} color="#ccc" />
+              <Text style={styles.emptyListText}>No posts found.</Text>
+              <Text style={styles.emptyListSubText}>Pull down to refresh.</Text>
             </View>
-          </View>
-        </View>
-        
-        <View style={styles.commentsSection}>
-          <Text style={styles.commentsTitle}>Comments</Text>
-          
-          {post.comments.length === 0 ? (
-            <View style={styles.emptyComments}>
-              <Ionicons name="chatbubbles-outline" size={32} color="#ccc" />
-              <Text style={styles.emptyCommentsText}>No comments yet</Text>
-              <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
-            </View>
-          ) : (
-            post.comments.map(comment => (
-              <View key={comment._id} style={styles.commentItem}>
-                <TouchableOpacity 
-                  onPress={() => handleUserPress(comment.user._id)}
-                  style={styles.commentUserSection}
-                >
-                  <Image 
-                    source={{ uri: comment.user.profilePicture || DEFAULT_AVATAR }}
-                    style={styles.commentAvatar}
-                  />
-                  <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
-                      <Text style={styles.commentUserName}>{comment.user.name}</Text>
-                      <Text style={styles.commentDate}>{formatDate(comment.createdAt)}</Text>
-                    </View>
-                    <Text style={styles.commentText}>{comment.text}</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
-      
-      <View style={styles.commentInput}>
-        <Image 
-          source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
-          style={styles.commentInputAvatar}
-        />
-        <TextInput
-          style={styles.commentTextInput}
-          placeholder="Add a comment..."
-          value={commentText}
-          onChangeText={setCommentText}
-          multiline
-        />
-        <TouchableOpacity 
-          style={[
-            styles.commentSubmitButton,
-            (!commentText.trim() || submitting) && styles.disabledButton
-          ]}
-          onPress={handleSubmitComment}
-          disabled={!commentText.trim() || submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name="send" size={18} color="#fff" />
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          ) : null
+        }
+      />
+    </SafeAreaView>
   );
 };
 
+// --- Styles ---
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f8f8f8'
+    backgroundColor: '#f0f0f0', // Background for the feed area
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center'
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 20
+    backgroundColor: '#f8f8f8',
   },
-  errorText: {
-    fontSize: 18,
-    color: '#333',
-    marginVertical: 10
-  },
-  backButton: {
-    marginTop: 20,
-    backgroundColor: '#4B0082',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20
-  },
-  backButtonText: {
-    color: '#fff',
-    fontWeight: 'bold'
+  listContentContainer: {
+    paddingBottom: 10, // Space at the very bottom of the list
+    // backgroundColor: '#f0f0f0', // Match safe area if needed
   },
   postContainer: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginBottom: 10
+    backgroundColor: '#fff', // White background for each post card
+    marginBottom: 8, // Space between post cards
+    paddingVertical: 15, // Vertical padding inside the card
+    // No horizontal padding here, applied to inner elements
+    // Add elevation/shadow for card effect if desired
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10
+    alignItems: 'center', // Align items vertically
+    marginBottom: 12,
+    paddingHorizontal: 15, // Horizontal padding for header content
   },
   userInfo: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   avatar: {
-    width: 40,
+    width: 40, // Slightly smaller avatar for feed view
     height: 40,
     borderRadius: 20,
-    marginRight: 10
+    marginRight: 10,
+    borderWidth: 0.5,
+    borderColor: '#eee'
   },
   userName: {
     fontWeight: 'bold',
-    fontSize: 16
+    fontSize: 15, // Slightly smaller font
   },
   userUsername: {
-    color: '#666',
-    fontSize: 13
+    color: '#555', // Darker grey
+    fontSize: 13,
   },
   postDate: {
-    color: '#999',
-    fontSize: 12
+    color: '#888', // Lighter grey
+    fontSize: 12,
   },
   postText: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15, // Standard text size
+    lineHeight: 22, // Good line spacing
     marginBottom: 10,
-    color: '#333'
+    color: '#333',
+    paddingHorizontal: 15, // Horizontal padding for text
   },
   postImage: {
-    width: '100%',
-    height: 300,
-    borderRadius: 10,
-    marginBottom: 10
+    width: '100%', // Full width image
+    aspectRatio: 16 / 9, // Common aspect ratio, adjust as needed
+    // height: 250, // Or fixed height
+    marginBottom: 10,
+    backgroundColor: '#e0e0e0', // Placeholder color while loading
   },
   postActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
-    paddingTop: 10
+    justifyContent: 'flex-start', // Align actions to the left
+    paddingTop: 10,
+    paddingHorizontal: 15, // Horizontal padding for actions row
+    // borderTopWidth: 1, // Optional separator line above actions
+    // borderTopColor: '#f1f1f1',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20
+    marginRight: 25, // Space between action buttons
   },
   actionText: {
-    marginLeft: 5,
-    color: '#666'
+    marginLeft: 6,
+    fontSize: 14,
+    color: '#555', // Match username color maybe
   },
-  commentsSection: {
-    backgroundColor: '#fff',
-    padding: 15,
-    flex: 1
+  separator: {
+    height: 1, // Or can be 0 if margin provides enough separation
+    // backgroundColor: '#e0e0e0', // If you want a visible line separator
   },
-  commentsTitle: {
+  emptyListContainer: {
+    flex: 1, // Take up available space if list is empty
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50, // Push it down a bit
+    padding: 20,
+  },
+  emptyListText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15
+    fontWeight: '600',
+    color: '#555',
+    marginTop: 15,
   },
-  commentItem: {
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    paddingBottom: 15
-  },
-  commentUserSection: {
-    flexDirection: 'row',
-    alignItems: 'flex-start'
-  },
-  commentAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 10
-  },
-  commentContent: {
-    flex: 1
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5
-  },
-  commentUserName: {
-    fontWeight: 'bold',
-    fontSize: 14
-  },
-  commentDate: {
-    color: '#999',
-    fontSize: 11
-  },
-  commentText: {
+  emptyListSubText: {
     fontSize: 14,
-    lineHeight: 20,
-    color: '#333'
-  },
-  emptyComments: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30
-  },
-  emptyCommentsText: {
-    fontSize: 16,
-    marginTop: 10,
-    color: '#666'
-  },
-  emptyCommentsSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 5
-  },
-  commentInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee'
-  },
-  commentInputAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 10
-  },
-  commentTextInput: {
-    flex: 1,
-    backgroundColor: '#f1f1f1',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    maxHeight: 100
-  },
-  commentSubmitButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#4B0082',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10
-  },
-  disabledButton: {
-    backgroundColor: '#cccccc'
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
   }
 });
 
-export default PostDetailsScreen;
+// Rename export if you rename the component
+export default PostDetailsScreen; // Or export default PostDetailsScreen if you keep that name

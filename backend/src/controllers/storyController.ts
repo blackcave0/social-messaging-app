@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Story from '../models/Story';
 import User from '../models/User';
 import { validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 
 // @desc    Create a new story
 // @route   POST /api/stories
@@ -111,7 +112,7 @@ export const viewStory = async (req: Request, res: Response) => {
     }
 
     // Check if user already viewed the story
-    if (!story.viewers.includes(req.user._id)) {
+    if (!story.viewers.some((viewerId: mongoose.Types.ObjectId) => viewerId.equals(req.user._id))) {
       story.viewers.push(req.user._id);
       await story.save();
     }

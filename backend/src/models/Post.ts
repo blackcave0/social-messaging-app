@@ -4,6 +4,7 @@ export interface IPost extends Document {
   user: mongoose.Types.ObjectId;
   description: string;
   images: string[];
+  mood?: string;
   likes: mongoose.Types.ObjectId[];
   comments: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -26,6 +27,9 @@ const postSchema = new Schema<IPost>(
         type: String,
       },
     ],
+    mood: {
+      type: String,
+    },
     likes: [
       {
         type: Schema.Types.ObjectId,
