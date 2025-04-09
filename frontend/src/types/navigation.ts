@@ -19,6 +19,7 @@ export type RootStackParamList = {
   CreateStory: undefined;
   EditProfile: undefined;
   Settings: undefined;
+  Notifications: undefined;
 
   // Chat screens
   ChatList: undefined;
@@ -60,7 +61,7 @@ export type RootTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Search: undefined;
   Create: NavigatorScreenParams<CreateStackParamList>;
-  Chat: NavigatorScreenParams<ChatStackParamList>;
+  Notifications: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
@@ -85,5 +86,5 @@ export type CreateStackScreenProps<T extends keyof CreateStackParamList> = Compo
 
 export type ChatStackScreenProps<T extends keyof ChatStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<ChatStackParamList, T>,
-  RootTabScreenProps<'Chat'>
+  RootStackScreenProps<'ChatList'>
 >; 
