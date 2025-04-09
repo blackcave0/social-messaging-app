@@ -112,16 +112,19 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log(`Reconnected to Socket.IO server after ${attemptNumber} attempts`);
       });
 
-      // Only update the socket state once it's connected
-      setSocket(socketInstance);
-
+      // Set up the message listener
       socketInstance.on('receive_message', (messageData: Message) => {
         console.log('New message received:', messageData);
 
-        // Only update messages if we're in the correct conversation
-        if (currentConversation && messageData.conversation === currentConversation._id) {
-          setMessages(prevMessages => [...prevMessages, messageData]);
-        }
+        // Update messages if we're in the correct conversation
+        setMessages(prevMessages => {
+          // Check if this message is already in our list (avoid duplicates)
+          const messageExists = prevMessages.some(msg => msg._id === messageData._id);
+          if (messageExists) {
+            return prevMessages;
+          }
+          return [...prevMessages, messageData];
+        });
 
         // Update conversations list to show latest message
         setConversations(prevConversations => {
@@ -139,11 +142,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
 
+      // Only update the socket state once it's connected
+      setSocket(socketInstance);
+
       return () => {
+        socketInstance.off('receive_message');
         socketInstance.disconnect();
       };
     }
-  }, [user, currentConversation]);
+  }, [user]); // Remove currentConversation from the dependency array
 
   // Get all conversations for the current user
   const getConversations = async () => {
