@@ -77,7 +77,7 @@ export default function UserListScreen({ navigation }: UserListScreenProps) {
   };
 
   const navigateToChat = (userId: string, name: string) => {
-    // Navigate to the ChatDetail screen directly
+    // Navigate directly to the ChatDetail screen
     navigation.navigate('ChatDetail', { userId, name });
   };
 

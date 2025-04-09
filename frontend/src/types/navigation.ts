@@ -10,9 +10,9 @@ export type RootStackParamList = {
   // Main screens
   Main: undefined;
   Feed: undefined;
-  PostDetails: { postId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
   Post: undefined;
-  UserProfile: { userId: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   Profile: undefined;
   MyProfile: undefined;
   CreatePost: undefined;
@@ -23,15 +23,14 @@ export type RootStackParamList = {
 
   // Chat screens
   ChatList: undefined;
-  Chat: { chatId?: string; userId?: string; name?: string };
   ChatDetail: { chatId?: string; userId?: string; name?: string };
   UserList: undefined;
 };
 
 export type HomeStackParamList = {
   Feed: undefined;
-  PostDetails: { postId: string };
-  UserProfile: { userId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   CreatePost: undefined;
   CreateStory: undefined;
 };
@@ -40,14 +39,13 @@ export type ProfileStackParamList = {
   MyProfile: { editComplete?: boolean };
   EditProfile: undefined;
   Settings: undefined;
-  PostDetails: { postId: string };
-  UserProfile: { userId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   CreatePost: undefined;
 };
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  Chat: { chatId?: string; userId?: string; name?: string };
   ChatDetail: { chatId?: string; userId?: string; name?: string };
   UserList: undefined;
 };
