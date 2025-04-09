@@ -692,4 +692,52 @@ export const getAllUsers = async (req: Request, res: Response) => {
     console.error('Get all users error:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+// @desc    Get user's followers
+// @route   GET /api/users/:id/followers
+// @access  Private
+export const getUserFollowers = async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.id;
+    
+    const user = await User.findById(userId)
+      .populate('followers', '_id username name profilePicture');
+      
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      followers: user.followers
+    });
+  } catch (error) {
+    console.error('Get user followers error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get user's following
+// @route   GET /api/users/:id/following
+// @access  Private
+export const getUserFollowing = async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.id;
+    
+    const user = await User.findById(userId)
+      .populate('following', '_id username name profilePicture');
+      
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      following: user.following
+    });
+  } catch (error) {
+    console.error('Get user following error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }; 
