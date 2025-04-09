@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,15 @@ import {
   // KeyboardAvoidingView, // Not needed without the bottom input
   Platform,
   SafeAreaView, // Use SafeAreaView
-  RefreshControl
+  RefreshControl,
+  BackHandler
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { API_URL, DEFAULT_AVATAR } from '../utils/config';
 import axios from 'axios';
 import { RootStackScreenProps } from '../types/navigation';
+import { useFocusEffect } from '@react-navigation/native';
 
 type Props = RootStackScreenProps<'PostDetails'>; // Keep type, but screen content changed
 
@@ -52,31 +54,90 @@ interface Post {
 
 // This screen now functions more like a Feed or Post List
 const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
-  // postId from route.params might be unused here if showing all posts
-  const { postId: initialPostId } = route.params; // Renamed for clarity
+  // Get parameters from route
+  const { postId: initialPostId, userId, userName } = route.params; // Get userId if coming from a user profile
   const { user } = useAuthContext();
   const [posts, setPosts] = useState<Post[]>([]); // State holds the array of posts
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Removed commentText and submitting state as there's no single comment input
+
+  // Handle back button press to maintain navigation history
+  const handleBackPress = useCallback(() => {
+    // Check if we came from a user profile or somewhere else
+    const fromUserProfile = !!userId;
+
+    console.log('Going back from PostDetails, fromUserProfile:', fromUserProfile);
+
+    if (fromUserProfile && navigation.canGoBack()) {
+      // If we came from a user profile, try to go back to that profile
+      navigation.goBack();
+    } else {
+      // If there's nowhere to go back, navigate to the Home screen in the main tab
+      try {
+        // Cast navigation to any to avoid TypeScript errors with nested navigation
+        (navigation as any).navigate('Main', {
+          screen: 'Home',
+          params: {
+            screen: 'Feed'
+          }
+        });
+      } catch (err) {
+        console.error('Navigation error:', err);
+        // Fallback navigation
+        navigation.navigate('Feed');
+      }
+    }
+  }, [navigation, userId]);
+
+  // Setup navigation header and back button handling
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: userId ? userName : 'All Posts',
+      headerLeft: () => (
+        <TouchableOpacity
+          style={{ padding: 10 }}
+          onPress={handleBackPress}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, userId, posts, handleBackPress]);
 
   // Fetch all posts
   const fetchPosts = useCallback(async () => {
     try {
       console.log('Requesting all posts from:', `${API_URL}/api/posts`);
-      // Assuming the endpoint returns { data: Post[] }
       const response = await axios.get<{ data: Post[] }>(`${API_URL}/api/posts`);
-      console.log('Fetched all posts:', response.data.data.length);
-      setPosts(response.data.data); // Set the array of posts
+
+      let filteredPosts = response.data.data;
+
+      // Filter posts by user ID if it's provided (coming from a user profile)
+      if (userId) {
+        console.log(`Filtering posts for user: ${userId}`);
+        filteredPosts = filteredPosts.filter(post => post.user && post.user._id === userId);
+        console.log(`Found ${filteredPosts.length} posts for user ${userId}`);
+
+        // Update header title if we have posts
+        if (filteredPosts.length > 0 && filteredPosts[0].user.name) {
+          navigation.setOptions({
+            headerTitle: `${filteredPosts[0].user.name}'s Posts`
+          });
+        }
+      } else {
+        console.log('Showing all posts:', filteredPosts.length);
+      }
+
+      setPosts(filteredPosts);
     } catch (error) {
       Alert.alert('Error', 'Failed to load posts');
       console.error('Fetch posts error:', error);
-      // Handle specific error types if needed (e.g., network error, server error)
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []); // No dependencies needed if fetching all posts
+  }, [userId, navigation]);
 
   useEffect(() => {
     setLoading(true);
@@ -87,6 +148,20 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     setRefreshing(true);
     fetchPosts();
   }, [fetchPosts]);
+
+  // Handle hardware back button on Android
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        handleBackPress();
+        return true; // Prevent default behavior
+      };
+
+      BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+    }, [handleBackPress])
+  );
 
   // Handle like action for a specific post in the list
   const handleLike = async (postId: string) => {
@@ -133,15 +208,14 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Navigate to the actual Post Details screen when a post item is pressed
-  // (Assuming you have a screen dedicated to showing *one* post and its comments)
+  // Handle post press - since we're already in post details, this just selects the post
   const handlePostPress = (postId: string) => {
-    // This navigation assumes you *also* have a screen (maybe the one from the previous refactor)
-    // actually named 'PostDetails' that shows a single post.
-    // If this *is* your main feed and you don't have a separate details screen, adjust accordingly.
-    navigation.navigate('PostDetails', { postId });
-  };
+    // Find the post and scroll to it or highlight it
+    console.log('Selected post:', postId);
 
+    // If needed, you could re-fetch the specific post details
+    // or update UI to show this post is selected
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -165,22 +239,14 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Render a single post item within the FlatList
   const renderPostItem = ({ item }: { item: Post }) => {
-    // console.log('Rendering post:', item._id, 'Image:', item.images?.[0]);
     return (
-      // Wrap item in TouchableOpacity to navigate on press
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => handlePostPress(item._id)}
-        style={styles.postContainer}
-      >
+      // Post container - no navigation when tapped as we're already in post details
+      <View style={styles.postContainer}>
         {/* Post Header */}
         <View style={styles.postHeader}>
           <TouchableOpacity
             style={styles.userInfo}
-            onPress={(e) => {
-              e.stopPropagation(); // Prevent post press when clicking user info
-              handleUserPress(item.user._id);
-            }}
+            onPress={() => handleUserPress(item.user._id)}
           >
             <Image
               source={{ uri: item.user.profilePicture || DEFAULT_AVATAR }}
@@ -195,7 +261,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
 
         {/* Post Content */}
-        <Text style={styles.postText} numberOfLines={4} ellipsizeMode="tail">
+        <Text style={styles.postText} ellipsizeMode="tail">
           {item.description}
         </Text>
 
@@ -211,10 +277,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.postActions}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation(); // Prevent post press when clicking like
-              handleLike(item._id);
-            }}
+            onPress={() => handleLike(item._id)}
           >
             <Ionicons
               name={item.likes.includes(user?._id || '') ? "heart" : "heart-outline"}
@@ -224,19 +287,15 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.actionText}>{item.likes.length}</Text>
           </TouchableOpacity>
 
-          {/* Comment Action - Navigates to details on press */}
+          {/* Comment Action */}
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation(); // Prevent post press when clicking comment icon
-              handlePostPress(item._id); // Navigate to details to see/add comments
-            }}
           >
             <Ionicons name="chatbubble-outline" size={22} color="#666" />
             <Text style={styles.actionText}>{item.comments.length}</Text>
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -257,10 +316,8 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         renderItem={renderPostItem}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.listContentContainer}
-        ItemSeparatorComponent={() => <View style={styles.separator} />} // Optional separator
-        // ListHeaderComponent={<View><Text>Start of Feed</Text></View>} // Example header
-        // ListFooterComponent={loading ? <ActivityIndicator/> : null} // Example footer loader for pagination
-        refreshControl={ // Pull-to-refresh
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
@@ -268,7 +325,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
             tintColor={"#4B0082"}
           />
         }
-        ListEmptyComponent={ // Show if fetch completes but posts array is empty
+        ListEmptyComponent={
           !loading ? (
             <View style={styles.emptyListContainer}>
               <Ionicons name="newspaper-outline" size={50} color="#ccc" />
@@ -288,6 +345,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f0f0', // Background for the feed area
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#efefef',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginHorizontal: 10,
+  },
+  headerRight: {
+    width: 40, // Same size as backButton for balance
+    height: 40,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -295,8 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   listContentContainer: {
-    paddingBottom: 10, // Space at the very bottom of the list
-    // backgroundColor: '#f0f0f0', // Match safe area if needed
+    paddingBottom: 20, // More space at the bottom
   },
   postContainer: {
     backgroundColor: '#fff', // White background for each post card
@@ -395,7 +483,7 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 8,
     textAlign: 'center',
-  }
+  },
 });
 
 // Rename export if you rename the component

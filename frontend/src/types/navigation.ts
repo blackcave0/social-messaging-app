@@ -8,26 +8,29 @@ export type RootStackParamList = {
   Register: undefined;
 
   // Main screens
+  Main: undefined;
   Feed: undefined;
-  PostDetails: { postId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
   Post: undefined;
-  UserProfile: { userId: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   Profile: undefined;
   MyProfile: undefined;
   CreatePost: undefined;
   CreateStory: undefined;
   EditProfile: undefined;
   Settings: undefined;
+  Notifications: undefined;
 
   // Chat screens
   ChatList: undefined;
-  Chat: { chatId: string };
+  ChatDetail: { chatId?: string; userId?: string; name?: string };
+  UserList: undefined;
 };
 
 export type HomeStackParamList = {
   Feed: undefined;
-  PostDetails: { postId: string };
-  UserProfile: { userId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   CreatePost: undefined;
   CreateStory: undefined;
 };
@@ -36,14 +39,15 @@ export type ProfileStackParamList = {
   MyProfile: { editComplete?: boolean };
   EditProfile: undefined;
   Settings: undefined;
-  PostDetails: { postId: string };
-  UserProfile: { userId: string };
+  PostDetails: { postId: string; userId?: string; userName?: string };
+  UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   CreatePost: undefined;
 };
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  Chat: { chatId: string };
+  ChatDetail: { chatId?: string; userId?: string; name?: string };
+  UserList: undefined;
 };
 
 export type CreateStackParamList = {
@@ -76,4 +80,9 @@ export type ProfileStackScreenProps<T extends keyof ProfileStackParamList> = Com
 export type CreateStackScreenProps<T extends keyof CreateStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<CreateStackParamList, T>,
   RootTabScreenProps<'Create'>
+>;
+
+export type ChatStackScreenProps<T extends keyof ChatStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, T>,
+  RootStackScreenProps<'ChatList'>
 >; 

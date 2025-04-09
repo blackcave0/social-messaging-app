@@ -4,6 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { RootStackParamList, RootTabParamList } from '../types/navigation';
+import { ChatProvider } from '../context/ChatContext';
+import { ChatStackNavigator, ChatTabBadgeWrapper } from './ChatNavigator';
 
 // Auth screens
 import LoginScreen from '../screens/LoginScreen';
@@ -12,8 +14,8 @@ import RegisterScreen from '../screens/RegisterScreen';
 // Main screens
 import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import ChatListScreen from '../screens/ChatListScreen';
 import ChatScreen from '../screens/ChatScreen';
+import UserListScreen from '../screens/UserListScreen';
 import CreatePostScreen from '../screens/CreatePostScreen';
 import CreateStoryScreen from '../screens/CreateStoryScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
@@ -22,6 +24,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PostDetailsScreen from '../screens/PostDetailsScreen';
 import SearchScreen from '../screens/SearchScreen';
+import ChatListScreen from '../screens/ChatListScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -32,7 +35,6 @@ const AuthNavigator = () => (
     <Stack.Screen name="Login" component={LoginScreen} />
     <Stack.Screen name="Register" component={RegisterScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
-
   </Stack.Navigator>
 );
 
@@ -47,14 +49,6 @@ const HomeStack = () => (
   </Stack.Navigator>
 );
 
-// Chat stack navigator
-const ChatStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="ChatList" component={ChatListScreen} />
-    <Stack.Screen name="Chat" component={ChatScreen} />
-  </Stack.Navigator>
-);
-
 // Create stack navigator
 const CreateStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -66,7 +60,7 @@ const CreateStack = () => (
 // Profile stack navigator
 const ProfileStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="MyProfile" component={ProfileScreen} />
+    <Stack.Screen name="MyProfile" component={ProfileScreen as React.ComponentType<any>} />
     <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
@@ -76,55 +70,60 @@ const ProfileStack = () => (
 );
 
 // Main tab navigator
-const MainNavigator = () => (
-  <Tab.Navigator
-    screenOptions={({ route }) => ({
-      tabBarIcon: ({ focused, color, size }) => {
-        let iconName;
+const MainNavigator = () => {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
 
-        if (route.name === 'Home') {
-          iconName = focused ? 'home' : 'home-outline';
-        } else if (route.name === 'Search') {
-          iconName = focused ? 'search' : 'search-outline';
-        } else if (route.name === 'Create') {
-          iconName = focused ? 'add-circle' : 'add-circle-outline';
-        } else if (route.name === 'Notifications') {
-          iconName = focused ? 'heart' : 'heart-outline';
-        } else if (route.name === 'Profile') {
-          iconName = focused ? 'person' : 'person-outline';
-        }
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Search') {
+            iconName = focused ? 'search' : 'search-outline';
+          } else if (route.name === 'Create') {
+            iconName = focused ? 'add-circle' : 'add-circle-outline';
+          } else if (route.name === 'Notifications') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
+          }
 
-        return <Ionicons name={iconName as any} size={24} color={color} />;
-      },
-      tabBarActiveTintColor: '#405DE6',
-      tabBarInactiveTintColor: '#888888',
-      tabBarShowLabel: false,
-      tabBarStyle: {
-        height: 50,
-        borderTopWidth: 0.5,
-        borderTopColor: '#E0E0E0',
-        elevation: 0,
-        shadowOpacity: 0,
-        backgroundColor: '#FFFFFF'
-      },
-      headerShown: false
-    })}
-  >
-    <Tab.Screen name="Home" component={HomeStack} />
-    <Tab.Screen name="Search" component={SearchScreen} />
-    <Tab.Screen
-      name="Create"
-      component={CreateStack}
-      options={{
-        tabBarIcon: ({ focused, color }) => (
-          <Ionicons name={focused ? "add-circle" : "add-circle-outline"} size={30} color={color} />
-        )
-      }}
-    />
-    <Tab.Screen name="Notifications" component={NotificationsScreen} />
-    <Tab.Screen name="Profile" component={ProfileStack} />
-  </Tab.Navigator>
-);
+          return <Ionicons name={iconName as any} size={24} color={color} />;
+        },
+        tabBarActiveTintColor: '#405DE6',
+        tabBarInactiveTintColor: '#888888',
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          height: 50,
+          borderTopWidth: 0.5,
+          borderTopColor: '#E0E0E0',
+          elevation: 0,
+          shadowOpacity: 0,
+          backgroundColor: '#FFFFFF'
+        },
+        headerShown: false
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen
+        name="Create"
+        component={CreateStack}
+        options={{
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? "add-circle" : "add-circle-outline"} size={30} color={color} />
+          )
+        }}
+      />
+      <Tab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+      />
+      <Tab.Screen name="Profile" component={ProfileStack} />
+    </Tab.Navigator>
+  );
+};
 
 // Root navigator
 export default function AppNavigator() {
@@ -134,5 +133,51 @@ export default function AppNavigator() {
     return null; // Or a splash screen / loading indicator
   }
 
-  return user ? <MainNavigator /> : <AuthNavigator />;
+  return user ? (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Main" component={MainNavigator} />
+      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen
+        name="ChatList"
+        options={{
+          headerShown: true,
+          title: "Messages"
+        }}
+      >
+        {(props) => (
+          <ChatProvider>
+            <ChatListScreen {...props} />
+          </ChatProvider>
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="ChatDetail"
+        options={{
+          headerShown: true,
+          title: "Chat"
+        }}
+      >
+        {(props) => (
+          <ChatProvider>
+            <ChatScreen {...props} />
+          </ChatProvider>
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="UserList"
+        options={{
+          title: 'New Message',
+          headerShown: true
+        }}
+      >
+        {(props) => (
+          <ChatProvider>
+            <UserListScreen {...props} />
+          </ChatProvider>
+        )}
+      </Stack.Screen>
+    </Stack.Navigator>
+  ) : (
+    <AuthNavigator />
+  );
 } 

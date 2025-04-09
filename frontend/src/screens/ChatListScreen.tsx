@@ -1,77 +1,142 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DEFAULT_AVATAR } from '../utils/config';
+import { useChatContext } from '../context/ChatContext';
+import { useAuthContext } from '../context/AuthContext';
 
 interface ChatListScreenProps {
   navigation: any;
 }
 
-// Mock data for chat list
-const mockChats = [
-  {
-    id: '1',
-    username: 'johndoe',
-    name: 'John Doe',
-    profilePicture: '',
-    lastMessage: 'Hey, how are you doing?',
-    timestamp: '10:30 AM',
-    unread: 2,
-  },
-  {
-    id: '2',
-    username: 'janedoe',
-    name: 'Jane Doe',
-    profilePicture: '',
-    lastMessage: 'Let\'s catch up soon!',
-    timestamp: 'Yesterday',
-    unread: 0,
-  },
-];
-
 export default function ChatListScreen({ navigation }: ChatListScreenProps) {
-  const navigateToChat = (userId: string, name: string) => {
-    navigation.navigate('Chat', { userId, name });
+  const { conversations, getConversations, isLoading, error } = useChatContext();
+  const { user } = useAuthContext();
+
+  useEffect(() => {
+    getConversations();
+  }, []);
+
+  const navigateToChat = (chatId: string, userId: string, name: string) => {
+    navigation.navigate('ChatDetail', { chatId, userId, name });
   };
 
-  const renderChatItem = ({ item }: any) => (
-    <TouchableOpacity 
-      style={styles.chatItem}
-      onPress={() => navigateToChat(item.id, item.name)}
-    >
-      <Image 
-        source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
-        style={styles.avatar}
-      />
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.timestamp}>{item.timestamp}</Text>
+  const getOtherParticipant = (participants: any[]) => {
+    return participants.find(p => p._id !== user?._id) || participants[0];
+  };
+
+  const formatLastMessageTime = (timestamp: string) => {
+    if (!timestamp) return '';
+
+    const messageDate = new Date(timestamp);
+    const now = new Date();
+
+    // Time formatting helper
+    const formatTime = (date: Date) => {
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12;
+      const minutesStr = minutes < 10 ? `0${minutes}` : minutes;
+      return `${hour12}:${minutesStr} ${ampm}`;
+    };
+
+    // Day name helper
+    const getDayName = (date: Date) => {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      return days[date.getDay()];
+    };
+
+    // Month name helper
+    const getMonthName = (date: Date) => {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return months[date.getMonth()];
+    };
+
+    // If it's today, show time
+    if (messageDate.toDateString() === now.toDateString()) {
+      return formatTime(messageDate);
+    }
+
+    // If it's within the last week, show day name
+    const diffDays = Math.floor((now.getTime() - messageDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 7) {
+      return getDayName(messageDate);
+    }
+
+    // Otherwise show date
+    return `${getMonthName(messageDate)} ${messageDate.getDate()}`;
+  };
+
+  const renderChatItem = ({ item }: any) => {
+    const otherUser = getOtherParticipant(item.participants);
+    const lastMessage = item.lastMessage ? item.lastMessage.text : 'Start a conversation';
+    const timestamp = item.lastMessage ? formatLastMessageTime(item.lastMessage.createdAt) : '';
+    const unread = item.lastMessage && !item.lastMessage.read && item.lastMessage.sender._id !== user?._id ? 1 : 0;
+
+    return (
+      <TouchableOpacity
+        style={styles.chatItem}
+        onPress={() => navigateToChat(item._id, otherUser._id, otherUser.name)}
+      >
+        <Image
+          source={{ uri: otherUser.profilePicture || DEFAULT_AVATAR }}
+          style={styles.avatar}
+        />
+        <View style={styles.chatContent}>
+          <View style={styles.chatHeader}>
+            <Text style={styles.name}>{otherUser.name}</Text>
+            <Text style={styles.timestamp}>{timestamp}</Text>
+          </View>
+          <View style={styles.messageRow}>
+            <Text
+              style={[styles.message, unread > 0 && styles.unreadMessage]}
+              numberOfLines={1}
+            >
+              {lastMessage}
+            </Text>
+            {unread > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadCount}>{unread}</Text>
+              </View>
+            )}
+          </View>
         </View>
-        <View style={styles.messageRow}>
-          <Text 
-            style={[styles.message, item.unread > 0 && styles.unreadMessage]}
-            numberOfLines={1}
-          >
-            {item.lastMessage}
-          </Text>
-          {item.unread > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadCount}>{item.unread}</Text>
-            </View>
-          )}
-        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4B0082" />
       </View>
-    </TouchableOpacity>
-  );
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
+        <Text style={styles.emptyText}>Error loading conversations</Text>
+        <Text style={styles.emptySubText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={getConversations}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {mockChats.length > 0 ? (
+      {conversations.length > 0 ? (
         <FlatList
-          data={mockChats}
+          data={conversations}
           renderItem={renderChatItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContent}
         />
       ) : (
@@ -79,12 +144,15 @@ export default function ChatListScreen({ navigation }: ChatListScreenProps) {
           <Ionicons name="chatbubble-ellipses-outline" size={60} color="#ccc" />
           <Text style={styles.emptyText}>No conversations yet</Text>
           <Text style={styles.emptySubText}>
-            Start messaging with your friends
+            Start messaging with users who follow you
           </Text>
         </View>
       )}
 
-      <TouchableOpacity style={styles.fab}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('UserList')}
+      >
         <Ionicons name="create" size={24} color="#fff" />
       </TouchableOpacity>
     </View>
@@ -94,6 +162,12 @@ export default function ChatListScreen({ navigation }: ChatListScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#fff',
   },
   listContent: {
@@ -175,6 +249,17 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 8,
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#4B0082',
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   fab: {
     position: 'absolute',

@@ -223,7 +223,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
       if (response.data) {
         // Log the entire response data to inspect its structure
-        console.log('User data response:', JSON.stringify(response.data));
+        console.log('User data response received');
 
         // Check if followers and following are arrays
         let followersArray: FollowerUser[] = [];
@@ -249,26 +249,65 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         console.log('After validation - Followers count:', followersArray.length);
         console.log('After validation - Following count:', followingArray.length);
 
-        // Log each follower and following for debugging
-        followersArray.forEach((follower, index) => {
-          console.log(`Follower ${index}:`, JSON.stringify(follower));
-        });
-
-        followingArray.forEach((following, index) => {
-          console.log(`Following ${index}:`, JSON.stringify(following));
-        });
-
         // Set the state with validated arrays
         setFollowers(followersArray);
         setFollowing(followingArray);
 
         console.log(`Loaded ${followersArray.length} followers and ${followingArray.length} following`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching followers/following:', err);
-      // Clear arrays on error to avoid stale data
-      setFollowers([]);
-      setFollowing([]);
+
+      // Try fetching from the new endpoints
+      try {
+        // Fetch followers
+        const followersResponse = await axios.get(`${API_URL}/api/users/${user._id}/followers`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (followersResponse.data.success) {
+          const validFollowers = followersResponse.data.followers.filter(
+            (item: any) => item && typeof item === 'object' && item._id
+          );
+          setFollowers(validFollowers);
+          console.log(`Loaded ${validFollowers.length} followers from followers endpoint`);
+        }
+      } catch (followersErr: any) {
+        console.error('Error fetching followers from dedicated endpoint:', followersErr);
+        // Silently handle 404s
+        if (followersErr.response && followersErr.response.status !== 404) {
+          console.error('Non-404 error fetching followers:', followersErr.response.status);
+        }
+        // Clear followers array on any error
+        setFollowers([]);
+      }
+
+      try {
+        // Fetch following
+        const followingResponse = await axios.get(`${API_URL}/api/users/${user._id}/following`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (followingResponse.data.success) {
+          const validFollowing = followingResponse.data.following.filter(
+            (item: any) => item && typeof item === 'object' && item._id
+          );
+          setFollowing(validFollowing);
+          console.log(`Loaded ${validFollowing.length} following from following endpoint`);
+        }
+      } catch (followingErr: any) {
+        console.error('Error fetching following from dedicated endpoint:', followingErr);
+        // Silently handle 404s
+        if (followingErr.response && followingErr.response.status !== 404) {
+          console.error('Non-404 error fetching following:', followingErr.response.status);
+        }
+        // Clear following array on any error
+        setFollowing([]);
+      }
     } finally {
       setLoadingFollowers(false);
     }
@@ -560,8 +599,14 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       setShowFollowersModal(false);
       setShowFollowingModal(false);
 
-      // Navigate to the user profile instead, which will have a message button
-      navigation.navigate('UserProfile', { userId });
+      // Navigate to ChatDetail directly instead of UserProfile
+      const rootNavigation = navigation.getParent();
+      if (rootNavigation) {
+        rootNavigation.navigate('ChatDetail', { userId, name: item.name });
+      } else {
+        // Fallback to direct navigation if parent navigator is not available
+        navigation.navigate('UserProfile', { userId });
+      }
     };
 
     const renderActionButton = () => {
@@ -605,7 +650,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           // This follower is also being followed by you - show Message button
           return (
             <TouchableOpacity
-              style={[styles.actionButton, styles.messageButton]}
+              style={[styles.actionButton, styles.messageBubbleButton]}
               onPress={() => handleMessage(item._id)}
             >
               <Text style={styles.actionButtonText}>Message</Text>
@@ -815,6 +860,16 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   const handleSettings = () => {
     navigation.navigate('Settings');
   };
+
+  const handleMessages = () => {
+    // Use the root navigation instead of the stack navigation for proper navigation to ChatList
+    const rootNavigation = navigation.getParent();
+    if (rootNavigation) {
+      rootNavigation.navigate('ChatList');
+    } else {
+      console.error('Could not access root navigation');
+    }
+  };
   // --- End of original functions ---
 
 
@@ -831,7 +886,24 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           margin: ITEM_MARGIN,
         }
       ]}
-      onPress={() => navigation.navigate('PostDetails', { postId: item._id })}
+      onPress={() => {
+        try {
+          // Using push instead of navigate ensures we put a new screen on the stack
+          // rather than potentially replacing one
+          console.log('Pushing PostDetails screen to navigation stack');
+          navigation.push('PostDetails', {
+            postId: item._id,
+            userId: user?._id // Pass current user ID to filter posts
+          });
+        } catch (err) {
+          console.error('Navigation error:', err);
+          // Fallback navigation if needed
+          navigation.navigate('PostDetails', {
+            postId: item._id,
+            userId: user?._id
+          });
+        }
+      }}
     >
       {item.imageUrl ? (
         <Image
@@ -848,7 +920,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       )}
     </TouchableOpacity>
     // Depend on itemSize so it updates when screen size changes
-  ), [itemSize, navigation]);
+  ), [itemSize, navigation, user?._id]);
 
 
   // Determine total posts count (keep as is)
@@ -881,11 +953,13 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           />
         }
         ListHeaderComponent={
-          // --- Keep the existing Header structure ---
           <>
             <View style={styles.header}>
               <TouchableOpacity style={styles.settingsButton} onPress={handleSettings}>
                 <Ionicons name="settings-outline" size={24} color="#333" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.messageButton} onPress={handleMessages}>
+                <Ionicons name="chatbubbles-outline" size={24} color="#333" />
               </TouchableOpacity>
             </View>
             <View style={styles.profileContainer}>
@@ -952,7 +1026,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               )}
             </View>
           </>
-          // --- End of Header structure ---
         }
         // Apply padding to the container that holds the grid items
         contentContainerStyle={styles.postsGridContainer}
@@ -1236,6 +1309,11 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     padding: 5,
+    marginLeft: 10,
+  },
+  messageButton: {
+    padding: 5,
+    marginLeft: 10,
   },
   // Style for the FlatList content container
   postsGridContainer: {
@@ -1411,16 +1489,22 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontWeight: '600',
-    // backgroundColor : "#4b0082",
     fontSize: 14,
   },
   followBackButton: {
     backgroundColor: '#6A0DAD', // Slightly different purple to distinguish from regular follow
   },
-  messageButton: {
+  messageBubbleButton: {
     backgroundColor: '#1E90FF', // Sky blue color for message button
   },
   errorButton: {
     backgroundColor: '#ff4444',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    padding: 5,
   },
 });

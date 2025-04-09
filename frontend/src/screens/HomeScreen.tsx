@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  FlatList, 
-  Image, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Image,
   RefreshControl,
   ActivityIndicator,
   Alert,
@@ -125,11 +125,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const fetchPosts = async () => {
     try {
       setLoading(true);
-      
+
       // In a real app, we would use the API
       // const response = await axios.get(`${API_URL}/api/posts`);
       // setPosts(response.data);
-      
+
       // For testing, use mock data with a simulated delay
       setTimeout(() => {
         setPosts(getMockPosts());
@@ -156,13 +156,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const handleLike = async (postId: string) => {
     try {
       // Optimistic update
-      setPosts(prevPosts => 
+      setPosts(prevPosts =>
         prevPosts.map(post => {
           if (post._id === postId) {
             const isLiked = post.likes.includes(user?._id || '');
             return {
               ...post,
-              likes: isLiked 
+              likes: isLiked
                 ? post.likes.filter(id => id !== user?._id)
                 : [...post.likes, user?._id || '']
             };
@@ -194,7 +194,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const renderStoryItem = ({ item }: { item: any }) => (
     <TouchableOpacity style={styles.storyContainer}>
       <View style={styles.storyRing}>
-        <Image 
+        <Image
           source={{ uri: item.profilePicture }}
           style={styles.storyAvatar}
         />
@@ -207,15 +207,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   const renderPost = ({ item }: { item: Post }) => {
     const isLiked = item.likes.includes(user?._id || '');
-    
+
     return (
       <View style={styles.postContainer}>
         <View style={styles.postHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.userInfo}
             onPress={() => handleUserPress(item.user._id)}
           >
-            <Image 
+            <Image
               source={{ uri: item.user.profilePicture || DEFAULT_AVATAR }}
               style={styles.avatar}
             />
@@ -225,55 +225,55 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             <Ionicons name="ellipsis-horizontal" size={20} color="#000" />
           </TouchableOpacity>
         </View>
-        
+
         {item.image && (
-          <Image 
+          <Image
             source={{ uri: item.image }}
             style={styles.postImage}
             resizeMode="cover"
           />
         )}
-        
+
         <View style={styles.actionsContainer}>
           <View style={styles.leftActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => handleLike(item._id)}
               style={styles.actionIcon}
             >
-              <Ionicons 
-                name={isLiked ? "heart" : "heart-outline"} 
-                size={26} 
+              <Ionicons
+                name={isLiked ? "heart" : "heart-outline"}
+                size={26}
                 color={isLiked ? "#FF3B30" : "#000"}
               />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               onPress={() => handlePostPress(item._id)}
               style={styles.actionIcon}
             >
               <Ionicons name="chatbubble-outline" size={24} color="#000" />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.actionIcon}>
               <Ionicons name="paper-plane-outline" size={24} color="#000" />
             </TouchableOpacity>
           </View>
-          
+
           <TouchableOpacity>
             <Ionicons name="bookmark-outline" size={24} color="#000" />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.postContent}>
           {item.likes.length > 0 && (
             <Text style={styles.likesText}>{item.likes.length} likes</Text>
           )}
-          
+
           <View style={styles.captionContainer}>
             <Text style={styles.captionUsername}>{item.user.username}</Text>
             <Text style={styles.captionText}>{item.text}</Text>
           </View>
-          
+
           {item.comments.length > 0 && (
             <TouchableOpacity onPress={() => handlePostPress(item._id)}>
               <Text style={styles.viewComments}>
@@ -281,7 +281,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               </Text>
             </TouchableOpacity>
           )}
-          
+
           <Text style={styles.timestamp}>
             {new Date(item.createdAt).toLocaleDateString('en-US', {
               month: 'short',
@@ -295,9 +295,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   const mockStories = [
     { id: 1, username: 'Your Story', profilePicture: user?.profilePicture || DEFAULT_AVATAR, isCurrentUser: true },
-    ...getMockPosts().map(post => ({ 
-      id: post.user._id, 
-      username: post.user.username, 
+    ...getMockPosts().map(post => ({
+      id: post.user._id,
+      username: post.user.username,
       profilePicture: post.user.profilePicture || DEFAULT_AVATAR
     }))
   ];
@@ -318,12 +318,12 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <TouchableOpacity style={styles.headerIcon}>
             <Ionicons name="add-circle-outline" size={26} color="#000" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('Chat')}>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('ChatList')}>
             <Ionicons name="paper-plane-outline" size={26} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
-      
+
       <FlatList
         data={posts}
         keyExtractor={(item) => item._id}
