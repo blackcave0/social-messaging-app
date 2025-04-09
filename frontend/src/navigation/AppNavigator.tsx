@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { RootStackParamList, RootTabParamList } from '../types/navigation';
 import { ChatProvider } from '../context/ChatContext';
-import { ChatStackNavigator } from './ChatNavigator';
+import { ChatStackNavigator, ChatTabBadgeWrapper } from './ChatNavigator';
 
 // Auth screens
 import LoginScreen from '../screens/LoginScreen';
@@ -24,6 +24,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PostDetailsScreen from '../screens/PostDetailsScreen';
 import SearchScreen from '../screens/SearchScreen';
+import ChatListScreen from '../screens/ChatListScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -34,7 +35,6 @@ const AuthNavigator = () => (
     <Stack.Screen name="Login" component={LoginScreen} />
     <Stack.Screen name="Register" component={RegisterScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
-
   </Stack.Navigator>
 );
 
@@ -83,8 +83,8 @@ const MainNavigator = () => {
             iconName = focused ? 'search' : 'search-outline';
           } else if (route.name === 'Create') {
             iconName = focused ? 'add-circle' : 'add-circle-outline';
-          } else if (route.name === 'Chat') {
-            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+          } else if (route.name === 'Notifications') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -117,14 +117,9 @@ const MainNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Chat"
-      >
-        {() => (
-          <ChatProvider>
-            <ChatStackNavigator />
-          </ChatProvider>
-        )}
-      </Tab.Screen>
+        name="Notifications"
+        component={NotificationsScreen}
+      />
       <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
   );
@@ -142,6 +137,19 @@ export default function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Main" component={MainNavigator} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen
+        name="ChatList"
+        options={{
+          headerShown: true,
+          title: "Messages"
+        }}
+      >
+        {(props) => (
+          <ChatProvider>
+            <ChatListScreen {...props} />
+          </ChatProvider>
+        )}
+      </Stack.Screen>
       <Stack.Screen
         name="ChatDetail"
         options={{
