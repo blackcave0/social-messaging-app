@@ -39,6 +39,15 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   } = useChatContext();
   const [newMessage, setNewMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(chatId || null);
+  const [localMessages, setLocalMessages] = useState<any[]>([]);
+
+  // Sync messages from context to local state to ensure UI updates
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log('Updating local messages from context:', messages.length);
+      setLocalMessages(messages);
+    }
+  }, [messages]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -162,7 +171,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <FlatList
-        data={messages}
+        data={localMessages}
         renderItem={renderMessage}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.messagesList}
