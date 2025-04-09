@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
-  Dimensions
+  Dimensions,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,7 +22,10 @@ import { SafeAreaLayout } from '../components';
 
 // Types
 type RootStackParamList = {
-  UserProfile: { userId: string };
+  UserProfile: {
+    userId: string;
+    fromFollowRequest?: boolean;
+  };
   // Add other screen params as needed
 };
 
@@ -35,7 +39,15 @@ interface UserData {
   bio?: string;
   following?: string[];
   followers?: string[];
+  friendRequests?: string[];
   token?: string;
+}
+
+interface UserRelationship {
+  isFollowing: boolean;
+  isFollowedBy: boolean;
+  hasReceivedRequest: boolean;
+  hasSentRequest: boolean;
 }
 
 interface Post {
@@ -64,7 +76,7 @@ type PossibleNavigation = {
 };
 
 const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { userId } = route.params;
+  const { userId, fromFollowRequest } = route.params;
   const { user: currentUser } = useAuthContext() as { user: UserData | null };
   const [user, setUser] = useState<UserData | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -72,8 +84,19 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isFriend, setIsFriend] = useState(false);
-  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [followers, setFollowers] = useState<UserData[]>([]);
+  const [following, setFollowing] = useState<UserData[]>([]);
+  const [showUserMenu, setShowUserMenu] = useState<string | null>(null);
+
+  // Replace old relationship state with a single relationship object
+  const [relationship, setRelationship] = useState<UserRelationship>({
+    isFollowing: false,
+    isFollowedBy: false,
+    hasReceivedRequest: false,
+    hasSentRequest: false
+  });
 
   // Cast navigation to a more flexible type
   const nav = navigation as unknown as PossibleNavigation;
@@ -81,6 +104,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     fetchUserProfile();
     fetchUserPosts();
+    fetchRelationshipStatus();
   }, [userId]);
 
   // Update display posts when source data changes
@@ -94,6 +118,38 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
       setDisplayPosts(formattedPosts);
     }
   }, [posts]);
+
+  // Effect to auto-scroll to the follow request buttons when coming from a notification
+  useEffect(() => {
+    if (fromFollowRequest && relationship.hasReceivedRequest) {
+      // We could add scroll to view logic here if needed
+      console.log('Coming from follow request notification');
+    }
+  }, [fromFollowRequest, relationship.hasReceivedRequest]);
+
+  // New function to fetch relationship status
+  const fetchRelationshipStatus = async () => {
+    if (!currentUser?.token) {
+      console.error('No auth token available');
+      return;
+    }
+
+    try {
+      console.log(`Fetching relationship status with user ID: ${userId}`);
+      const response = await axios.get(`${API_URL}/api/users/${userId}/relationship`, {
+        headers: {
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setRelationship(response.data.relationship);
+        console.log('Relationship data:', response.data.relationship);
+      }
+    } catch (error: any) {
+      console.error('Error fetching relationship status:', error);
+    }
+  };
 
   const fetchUserProfile = async () => {
     if (!currentUser?.token) {
@@ -111,20 +167,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
       });
 
       setUser(response.data);
-
-      // Check if this user is in current user's following list
-      if (currentUser?.following?.includes(userId)) {
-        setIsFriend(true);
-      } else {
-        // Try to check if we have sent a friend request
-        // Using try/catch to handle any API errors without breaking the app
-        try {
-          await checkFriendRequestStatus();
-        } catch (error) {
-          console.log('Friend request status check failed, continuing without it');
-        }
-      }
-
+      // Relationship status is now handled by fetchRelationshipStatus()
     } catch (error: any) {
       console.error('Error fetching user profile:', error);
       setError('Failed to load user profile');
@@ -136,6 +179,60 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchFollowers = async () => {
+    if (!currentUser?.token) {
+      console.error('No auth token available');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_URL}/api/users/${userId}/followers`, {
+        headers: {
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setFollowers(response.data.followers);
+      }
+    } catch (error: any) {
+      console.error('Error fetching followers:', error);
+      Alert.alert('Error', 'Failed to load followers');
+    }
+  };
+
+  const fetchFollowing = async () => {
+    if (!currentUser?.token) {
+      console.error('No auth token available');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_URL}/api/users/${userId}/following`, {
+        headers: {
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setFollowing(response.data.following);
+      }
+    } catch (error: any) {
+      console.error('Error fetching following:', error);
+      Alert.alert('Error', 'Failed to load following');
+    }
+  };
+
+  const handleShowFollowers = async () => {
+    setShowFollowersModal(true);
+    await fetchFollowers();
+  };
+
+  const handleShowFollowing = async () => {
+    setShowFollowingModal(true);
+    await fetchFollowing();
   };
 
   const fetchUserPosts = async () => {
@@ -169,48 +266,21 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const checkFriendRequestStatus = async () => {
-    if (!currentUser?.token) return;
-
-    try {
-      // Use the existing endpoint to get all friend requests
-      // This endpoint exists in the backend from the search results
-      const response = await axios.get(`${API_URL}/api/users/friend-requests`, {
-        headers: {
-          Authorization: `Bearer ${currentUser.token}`,
-        },
-      });
-
-      // Check if the current user has an active friend request to this user
-      // The backend returns information about the users who sent requests to you,
-      // so we need to check differently to see if we've sent a request to this user
-
-      // For now, we'll just set it to false since the backend doesn't
-      // have the specific endpoint we need yet
-      setFriendRequestSent(false);
-    } catch (error) {
-      console.error('Error checking friend request status:', error);
-      // Don't show alerts for this error since it's not critical
-      // Just assume we haven't sent a request
-      setFriendRequestSent(false);
-    }
-  };
-
   const handleRefresh = () => {
     setRefreshing(true);
     Promise.all([fetchUserProfile(), fetchUserPosts()])
       .finally(() => setRefreshing(false));
   };
 
-  const handleSendFriendRequest = async () => {
+  const handleFollowUser = async () => {
     if (!currentUser?.token) {
-      Alert.alert('Error', 'You need to be logged in to send friend requests');
+      Alert.alert('Error', 'You need to be logged in to follow users');
       return;
     }
 
     try {
       const response = await axios.post(
-        `${API_URL}/api/users/${userId}/friend-request`,
+        `${API_URL}/api/users/${userId}/follow`,
         {},
         {
           headers: {
@@ -219,11 +289,215 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         }
       );
 
-      setFriendRequestSent(true);
-      Alert.alert('Success', 'Friend request sent successfully');
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowing: true,
+          hasSentRequest: true
+        }));
+
+        Alert.alert('Success', 'Follow request sent successfully');
+        // Refresh data
+        fetchUserProfile();
+        fetchRelationshipStatus();
+      }
     } catch (error: any) {
-      console.error('Error sending friend request:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to send friend request';
+      console.error('Error following user:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to follow user';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const handleUnfollowUser = async () => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to unfollow users');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/unfollow`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowing: false,
+          hasSentRequest: false
+        }));
+
+        Alert.alert('Success', 'User unfollowed successfully');
+        // Refresh data
+        fetchUserProfile();
+        fetchRelationshipStatus();
+      }
+    } catch (error: any) {
+      console.error('Error unfollowing user:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to unfollow user';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  // Add new function to accept follow request
+  const handleAcceptFollowRequest = async () => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to accept follow requests');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/accept-follow-request`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowedBy: true,
+          hasReceivedRequest: false
+        }));
+
+        Alert.alert('Success', 'Follow request accepted');
+        // Refresh data
+        fetchUserProfile();
+        fetchRelationshipStatus();
+      }
+    } catch (error: any) {
+      console.error('Error accepting follow request:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to accept follow request';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  // Add new function to reject follow request
+  const handleRejectFollowRequest = async () => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to reject follow requests');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/reject-follow-request`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          hasReceivedRequest: false
+        }));
+
+        Alert.alert('Success', 'Follow request rejected');
+        // Refresh data
+        fetchRelationshipStatus();
+      }
+    } catch (error: any) {
+      console.error('Error rejecting follow request:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to reject follow request';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const handleSendMessage = () => {
+    // Since there's no Chat tab in the main navigation,
+    // we'll directly navigate to the Chat screen
+    // We'll use any to bypass type checking for now
+    (navigation as any).navigate('Chat', {
+      userId: userId,
+      name: user?.name || user?.username || 'User'
+    });
+  };
+
+  const handleRemoveFollower = async (userId: string) => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to remove followers');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/remove-follower`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowedBy: false
+        }));
+        Alert.alert('Success', 'Follower removed successfully');
+        // Refresh data
+        fetchUserProfile();
+        fetchRelationshipStatus();
+      }
+    } catch (error: any) {
+      console.error('Error removing follower:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to remove follower';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const handleBlockUser = async (userId: string) => {
+    if (!currentUser?.token) {
+      Alert.alert('Error', 'You need to be logged in to block users');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/users/${userId}/block`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update relationship state
+        setRelationship(prev => ({
+          ...prev,
+          isFollowing: false,
+          isFollowedBy: false,
+          hasSentRequest: false,
+          hasReceivedRequest: false
+        }));
+        Alert.alert('Success', 'User blocked successfully');
+        // Go back to previous screen
+        nav.goBack();
+      }
+    } catch (error: any) {
+      console.error('Error blocking user:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to block user';
       Alert.alert('Error', errorMessage);
     }
   };
@@ -249,6 +523,61 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
       )}
     </TouchableOpacity>
+  );
+
+  const renderUserItem = ({ item }: { item: UserData }) => (
+    <View style={styles.userItemContainer}>
+      <TouchableOpacity
+        style={styles.userItem}
+        onPress={() => {
+          setShowFollowersModal(false);
+          setShowFollowingModal(false);
+          navigation.navigate('UserProfile', {
+            userId: item._id,
+            fromFollowRequest: false
+          });
+        }}
+      >
+        <Image
+          source={{ uri: item.profilePicture || DEFAULT_AVATAR }}
+          style={styles.userAvatar}
+        />
+        <View style={styles.userInfo}>
+          <Text style={styles.username}>@{item.username}</Text>
+          <Text style={styles.name}>{item.name}</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.menuButton}
+        onPress={() => setShowUserMenu(showUserMenu === item._id ? null : item._id)}
+      >
+        <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+      </TouchableOpacity>
+
+      {showUserMenu === item._id && (
+        <View style={styles.menuContainer}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              setShowUserMenu(null);
+              handleRemoveFollower(item._id);
+            }}
+          >
+            <Text style={styles.menuItemText}>Remove</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              setShowUserMenu(null);
+              handleBlockUser(item._id);
+            }}
+          >
+            <Text style={[styles.menuItemText, styles.blockText]}>Block</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   if (loading && !refreshing) {
@@ -298,8 +627,42 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Ionicons name="arrow-back" size={24} color="#333" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>{user?.username || 'User Profile'}</Text>
-              <View style={styles.headerRight} />
+              {userId !== currentUser?._id && (
+                <TouchableOpacity
+                  style={styles.optionsButton}
+                  onPress={() => setShowUserMenu(showUserMenu ? null : userId)}
+                >
+                  <Ionicons name="ellipsis-vertical" size={24} color="#333" />
+                </TouchableOpacity>
+              )}
             </View>
+
+            {showUserMenu && userId !== currentUser?._id && (
+              <View style={styles.userOptionsMenu}>
+                {relationship.isFollowedBy && (
+                  <TouchableOpacity
+                    style={styles.userOptionItem}
+                    onPress={() => {
+                      handleRemoveFollower(userId);
+                      setShowUserMenu(null);
+                    }}
+                  >
+                    <Ionicons name="person-remove" size={20} color="#333" />
+                    <Text style={styles.userOptionText}>Remove Follower</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.userOptionItem}
+                  onPress={() => {
+                    handleBlockUser(userId);
+                    setShowUserMenu(null);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#ff4444" />
+                  <Text style={[styles.userOptionText, styles.blockText]}>Block User</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.profileContainer}>
               <Image
@@ -313,34 +676,98 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.statValue}>{displayPosts.length}</Text>
                     <Text style={styles.statLabel}>Posts</Text>
                   </View>
-                  <View style={styles.statItem}>
+                  <TouchableOpacity
+                    style={styles.statItem}
+                    onPress={handleShowFollowing}
+                  >
                     <Text style={styles.statValue}>{user?.following?.length || 0}</Text>
                     <Text style={styles.statLabel}>Following</Text>
-                  </View>
-                  <View style={styles.statItem}>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statItem}
+                    onPress={handleShowFollowers}
+                  >
                     <Text style={styles.statValue}>{user?.followers?.length || 0}</Text>
                     <Text style={styles.statLabel}>Followers</Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
-                {!isFriend && !friendRequestSent ? (
-                  <TouchableOpacity
-                    style={styles.followButton}
-                    onPress={handleSendFriendRequest}
-                  >
-                    <Text style={styles.followButtonText}>Follow</Text>
-                  </TouchableOpacity>
-                ) : friendRequestSent ? (
-                  <TouchableOpacity
-                    style={styles.pendingButton}
-                    disabled={true}
-                  >
-                    <Text style={styles.pendingButtonText}>Request Sent</Text>
-                  </TouchableOpacity>
+                {/* Relationship buttons based on state */}
+                {relationship.hasReceivedRequest ? (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.acceptButton]}
+                      onPress={handleAcceptFollowRequest}
+                    >
+                      <Text style={styles.actionButtonText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={handleRejectFollowRequest}
+                    >
+                      <Text style={styles.actionButtonText}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : relationship.isFollowing ? (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={styles.followingButton}
+                      onPress={handleUnfollowUser}
+                    >
+                      <Text style={styles.followingButtonText}>Following</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.messageButton}
+                      onPress={handleSendMessage}
+                    >
+                      <Text style={styles.messageButtonText}>Message</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : relationship.hasSentRequest ? (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={styles.requestedButton}
+                      onPress={handleUnfollowUser}
+                    >
+                      <Text style={styles.requestedButtonText}>Requested</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.messageButton}
+                      onPress={handleSendMessage}
+                    >
+                      <Text style={styles.messageButtonText}>Message</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : relationship.isFollowedBy ? (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={styles.followBackButton}
+                      onPress={handleFollowUser}
+                    >
+                      <Text style={styles.followBackButtonText}>Follow Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.messageButton}
+                      onPress={handleSendMessage}
+                    >
+                      <Text style={styles.messageButtonText}>Message</Text>
+                    </TouchableOpacity>
+                  </View>
                 ) : (
-                  <TouchableOpacity style={styles.followingButton}>
-                    <Text style={styles.followingButtonText}>Following</Text>
-                  </TouchableOpacity>
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={styles.followButton}
+                      onPress={handleFollowUser}
+                    >
+                      <Text style={styles.followButtonText}>Follow</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.messageButton}
+                      onPress={handleSendMessage}
+                    >
+                      <Text style={styles.messageButtonText}>Message</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </View>
@@ -365,6 +792,62 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         }
         contentContainerStyle={styles.postsGrid}
       />
+
+      {/* Followers Modal */}
+      <Modal
+        visible={showFollowersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFollowersModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Followers</Text>
+              <TouchableOpacity
+                onPress={() => setShowFollowersModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={followers}
+              renderItem={renderUserItem}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.modalList}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Following Modal */}
+      <Modal
+        visible={showFollowingModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFollowingModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Following</Text>
+              <TouchableOpacity
+                onPress={() => setShowFollowingModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={following}
+              renderItem={renderUserItem}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.modalList}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaLayout>
   );
 };
@@ -411,6 +894,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EFEFEF',
+    position: 'relative',
   },
   backButton: {
     padding: 5,
@@ -419,9 +903,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
+    textAlign: 'center',
   },
-  headerRight: {
-    width: 30, // To balance the back button
+  optionsButton: {
+    padding: 5,
+    position: 'absolute',
+    right: 10,
   },
   profileContainer: {
     flexDirection: 'row',
@@ -447,48 +935,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666',
-  },
-  followButton: {
-    backgroundColor: '#405DE6',
-    paddingVertical: 8,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  followButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  pendingButton: {
-    backgroundColor: '#E0E0E0',
-    paddingVertical: 8,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  pendingButtonText: {
-    color: '#666',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  followingButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    borderRadius: 5,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#DBDBDB',
-  },
-  followingButtonText: {
-    color: '#333',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
   userInfoContainer: {
     padding: 15,
@@ -498,60 +951,262 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    marginBottom: 2,
   },
   username: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   bioText: {
     fontSize: 14,
+    lineHeight: 20,
     color: '#333',
   },
   section: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFEFEF',
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 5,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 10,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingVertical: 30,
   },
   emptyStateText: {
-    fontSize: 14,
-    color: '#666',
     marginTop: 10,
+    fontSize: 16,
+    color: '#999',
   },
   postsGrid: {
-    paddingBottom: 20,
+    paddingHorizontal: 1,
   },
   postItem: {
     width: POST_WIDTH,
     height: POST_WIDTH,
     margin: 1,
+    backgroundColor: '#f1f1f1',
   },
   postImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   textPostContainer: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F5F5F5',
+    padding: 8,
     justifyContent: 'center',
-    padding: 10,
+    alignItems: 'center',
+    height: '100%',
   },
   textPostContent: {
     fontSize: 12,
     color: '#333',
+    textAlign: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  followButton: {
+    backgroundColor: '#405DE6',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  followButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  followingButton: {
+    backgroundColor: '#f1f1f1',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  followingButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  requestedButton: {
+    backgroundColor: '#f1f1f1',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  requestedButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  messageButton: {
+    backgroundColor: '#f1f1f1',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginLeft: 5,
+    alignItems: 'center',
+  },
+  messageButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  actionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  acceptButton: {
+    backgroundColor: '#405DE6',
+  },
+  rejectButton: {
+    backgroundColor: '#f5f5f5',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalList: {
+    padding: 10,
+  },
+  userItemContainer: {
+    position: 'relative',
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  followBackButton: {
+    backgroundColor: '#405DE6',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  followBackButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  menuButton: {
+    position: 'absolute',
+    right: 10,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    padding: 5,
+  },
+  menuContainer: {
+    position: 'absolute',
+    right: 10,
+    top: 40,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  menuItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  menuItemText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  blockText: {
+    color: '#ff4444',
+  },
+  userOptionsMenu: {
+    position: 'absolute',
+    right: 10,
+    top: 50,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 1000,
+    width: 200,
+  },
+  userOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  userOptionText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 10,
   },
 });
 

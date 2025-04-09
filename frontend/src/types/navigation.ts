@@ -33,7 +33,7 @@ export type HomeStackParamList = {
 };
 
 export type ProfileStackParamList = {
-  MyProfile: undefined;
+  MyProfile: { editComplete?: boolean };
   EditProfile: undefined;
   Settings: undefined;
   PostDetails: { postId: string };

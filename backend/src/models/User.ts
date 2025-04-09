@@ -11,6 +11,7 @@ export interface IUser extends Document {
   followers: mongoose.Types.ObjectId[];
   following: mongoose.Types.ObjectId[];
   friendRequests: mongoose.Types.ObjectId[];
+  blockedUsers: mongoose.Types.ObjectId[];
   posts: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +64,12 @@ const userSchema = new Schema<IUser>(
       },
     ],
     friendRequests: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    blockedUsers: [
       {
         type: Schema.Types.ObjectId,
         ref: 'User',

@@ -169,10 +169,19 @@ export default function NotificationsScreen({ navigation }: { navigation: any })
           }
           break;
         case 'follow':
-        case 'friendRequest':
           navigation.navigate('Home', {
             screen: 'UserProfile',
             params: { userId: notification.sender._id }
+          });
+          break;
+        case 'friendRequest':
+          // Navigate to the sender's profile for handling follow request
+          navigation.navigate('Home', {
+            screen: 'UserProfile',
+            params: {
+              userId: notification.sender._id,
+              fromFollowRequest: true // Add flag to indicate this is from a follow request
+            }
           });
           break;
       }
