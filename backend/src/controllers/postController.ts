@@ -9,9 +9,9 @@ import mongoose from 'mongoose';
 // Create a new post with images
 export const createPost = async (req: Request, res: Response) => {
   try {
-    console.log('Create post request received');
-    console.log('Request body:', req.body);
-    console.log('Files:', req.files || req.file || 'No files');
+    // console.log('Create post request received');
+    // console.log('Request body:', req.body);
+    // console.log('Files:', req.files || req.file || 'No files');
     
     const { description, mood } = req.body;
     
@@ -22,7 +22,7 @@ export const createPost = async (req: Request, res: Response) => {
     }
     
     const userId = req.user._id;
-    console.log('User ID from request:', userId);
+    // console.log('User ID from request:', userId);
 
     // Check if user exists in database
     const user = await User.findById(userId);
@@ -35,19 +35,19 @@ export const createPost = async (req: Request, res: Response) => {
     let imageUrls: string[] = [];
     
     if (req.files && Array.isArray(req.files)) {
-      console.log(`Processing ${req.files.length} files`);
+      // console.log(`Processing ${req.files.length} files`);
       
       // Upload each file to Cloudinary
       const uploadPromises = req.files.map(async (file, index) => {
         try {
-          console.log(`Uploading file ${index + 1}:`, file.path);
+          // console.log(`Uploading file ${index + 1}:`, file.path);
           
           // Upload to Cloudinary
           const result = await cloudinary.uploader.upload(file.path, {
             folder: 'social-app/posts',
           });
           
-          console.log(`File ${index + 1} uploaded successfully:`, result.secure_url);
+          // console.log(`File ${index + 1} uploaded successfully:`, result.secure_url);
           
           // Delete local file after upload
           fs.unlinkSync(file.path);
@@ -61,32 +61,32 @@ export const createPost = async (req: Request, res: Response) => {
       
       // Wait for all uploads to complete
       imageUrls = await Promise.all(uploadPromises);
-      console.log('All files uploaded successfully. URLs:', imageUrls);
+      // console.log('All files uploaded successfully. URLs:', imageUrls);
     } else if (req.file) {
       // If only a single file was uploaded
-      console.log('Processing single file:', req.file.path);
+      // console.log('Processing single file:', req.file.path);
       
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: 'social-app/posts',
       });
       
-      console.log('File uploaded successfully:', result.secure_url);
+      // console.log('File uploaded successfully:', result.secure_url);
       
       // Delete local file after upload
       fs.unlinkSync(req.file.path);
       
       imageUrls = [result.secure_url];
     } else {
-      console.log('No files to upload');
+      // console.log('No files to upload');
     }
 
     // Create new post
-    console.log('Creating new post with data:', {
-      userId,
-      description,
-      mood,
-      imageCount: imageUrls.length
-    });
+    // console.log('Creating new post with data:', {
+    //   userId,
+    //   description,
+    //   mood,
+    //   imageCount: imageUrls.length
+    // });
     
     const newPost = new Post({
       user: userId,
@@ -97,13 +97,13 @@ export const createPost = async (req: Request, res: Response) => {
 
     // Save post to database
     const savedPost = await newPost.save();
-    console.log('Post saved successfully, ID:', savedPost._id);
+    // console.log('Post saved successfully, ID:', savedPost._id);
 
     // Add post to user's posts
     await User.findByIdAndUpdate(userId, {
       $push: { posts: savedPost._id },
     });
-    console.log('Post added to user document');
+    // console.log('Post added to user document');
 
     res.status(201).json({
       success: true,
@@ -122,14 +122,14 @@ export const createPost = async (req: Request, res: Response) => {
 // Get all posts
 export const getAllPosts = async (req: Request, res: Response) => {
   try {
-    console.log('Getting all posts');
+    // console.log('Getting all posts');
     
     // First try without comments population to avoid issues
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .populate('user', '_id name username profilePicture');
       
-    console.log(`Found ${posts.length} posts`);
+    // console.log(`Found ${posts.length} posts`);
     
     res.status(200).json({
       success: true,
@@ -149,21 +149,21 @@ export const getAllPosts = async (req: Request, res: Response) => {
 // Get a single post
 export const getPostById = async (req: Request, res: Response) => {
   try {
-    console.log(`Getting post with ID: ${req.params.id}`);
+    // console.log(`Getting post with ID: ${req.params.id}`);
     
     // First try without comments population to avoid issues
     const post = await Post.findById(req.params.id)
       .populate('user', '_id name username profilePicture');
 
     if (!post) {
-      console.log(`Post with ID ${req.params.id} not found`);
+      // console.log(`Post with ID ${req.params.id} not found`);
       return res.status(404).json({
         success: false,
         message: 'Post not found',
       });
     }
 
-    console.log(`Successfully retrieved post: ${post._id}`);
+    // console.log(`Successfully retrieved post: ${post._id}`);
     
     res.status(200).json({
       success: true,
