@@ -60,9 +60,9 @@ export const usePosts = () => {
     try {
       // Log detailed info about the images
       if (images.length > 0) {
-        console.log('Images being added to post:', images);
+        // console.log('Images being added to post:', images);
       } else {
-        console.log('Creating post without images');
+        // console.log('Creating post without images');
       }
 
       const newPost: Post = {
@@ -80,7 +80,7 @@ export const usePosts = () => {
         comments: [],
       };
 
-      console.log('Creating new post:', newPost);
+      // console.log('Creating new post:', newPost);
 
       const updatedPosts = [newPost, ...posts];
       setPosts(updatedPosts);
