@@ -92,7 +92,7 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
       quality: 1,
     });
 
-    console.log('Image picker result:', result);
+    // console.log('Image picker result:', result);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
@@ -123,12 +123,12 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsUploading(true);
 
       // Log user state for debugging
-      console.log('Current user state:', {
+      /* console.log('Current user state:', {
         userId: user?.id,
         name: user?.name,
         isLoading,
         authStatus
-      });
+      }); */
 
       if (!authStatus.authenticated) {
         Alert.alert('Authentication Error', 'You must be logged in to create a post.');
@@ -175,20 +175,20 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
         images: image ? [image] : []
       };
 
-      console.log('Submitting post with image:', image ? 'Yes' : 'No');
+      // console.log('Submitting post with image:', image ? 'Yes' : 'No');
 
       let response;
 
       // Try using the test upload function first for better debugging
       if (image) {
-        console.log('Using test upload function with image');
+        // console.log('Using test upload function with image');
         response = await testImageUpload(image, postText);
       } else {
         // Use regular createPost function
         response = await createPost(postData);
       }
 
-      console.log('Post created successfully:', response);
+      // console.log('Post created successfully:', response);
 
       // Clear state and go back
       setPostText('');
