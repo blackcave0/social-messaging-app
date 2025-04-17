@@ -1,26 +1,18 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import Message from '../models/Message';
-import Conversation from '../models/Conversation';
-import User from '../models/User';
 import { validationResult } from 'express-validator';
+import * as messageService from '../services/messageService';
+import User from '../models/User';
 
 // @desc    Get all conversations for a user
 // @route   GET /api/chat/conversations
 // @access  Private
 export const getConversations = async (req: Request, res: Response) => {
   try {
-    const conversations = await Conversation.find({
-      participants: { $in: [req.user._id] },
-    })
-      .populate('participants', '_id username name profilePicture')
-      .populate('lastMessage')
-      .sort({ updatedAt: -1 });
-
+    const conversations = await messageService.getConversations(req.user._id.toString());
     res.json(conversations);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get conversations error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -37,51 +29,15 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // First check if conversation already exists
-    let conversation = await Conversation.findOne({
-      participants: { $all: [req.user._id, new mongoose.Types.ObjectId(userId)] }
-    })
-      .populate('participants', '_id username name profilePicture')
-      .populate('lastMessage');
-
-    // If not, create a new conversation
-    if (!conversation) {
-      try {
-        conversation = new Conversation({
-          participants: [req.user._id, new mongoose.Types.ObjectId(userId)],
-        });
-        await conversation.save();
-        await conversation.populate('participants', '_id username name profilePicture');
-      } catch (err: any) {
-        console.log('Conversation creation error:', err);
-        
-        // If there's a duplicate key error, try to fetch the conversation again
-        if (err.code === 11000) {
-          // Wait a moment to ensure the database has completed any pending writes
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          conversation = await Conversation.findOne({
-            $or: [
-              { participants: { $all: [req.user._id, new mongoose.Types.ObjectId(userId)] } },
-              { participants: { $all: [new mongoose.Types.ObjectId(userId), req.user._id] } }
-            ]
-          })
-            .populate('participants', '_id username name profilePicture')
-            .populate('lastMessage');
-            
-          if (!conversation) {
-            return res.status(500).json({ message: 'Failed to get or create conversation' });
-          }
-        } else {
-          throw err;
-        }
-      }
-    }
+    const conversation = await messageService.getOrCreateConversation(
+      req.user._id.toString(),
+      userId
+    );
 
     res.json(conversation);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get or create conversation error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -91,76 +47,86 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
 export const sendMessage = async (req: Request, res: Response) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.error('Validation errors in sendMessage:', errors.array());
     return res.status(400).json({ errors: errors.array() });
   }
 
   try {
-    const { recipientId, text, mediaUrl, mediaType } = req.body;
+    // Support both recipientId and recipient_id for backward compatibility
+    const recipientId = req.body.recipientId || req.body.recipient_id;
+    const { text, mediaUrl, mediaType } = req.body;
+
+    console.log('Sending message:', { recipientId, text: text ? 'text present' : 'no text', mediaUrl: mediaUrl ? 'media present' : 'no media' });
+
+    if (!recipientId) {
+      console.error('No recipient ID provided in request');
+      return res.status(400).json({ message: 'Recipient ID is required' });
+    }
 
     // Check if recipient exists
     const recipient = await User.findById(recipientId);
     if (!recipient) {
+      console.error(`Recipient not found with ID: ${recipientId}`);
       return res.status(404).json({ message: 'Recipient not found' });
     }
 
     // Get or create conversation
-    let conversation = await Conversation.findOne({
-      participants: { $all: [req.user._id, new mongoose.Types.ObjectId(recipientId)] }
-    });
+    const conversation = await messageService.getOrCreateConversation(
+      req.user._id.toString(),
+      recipientId
+    );
 
-    if (!conversation) {
-      try {
-        conversation = new Conversation({
-          participants: [req.user._id, new mongoose.Types.ObjectId(recipientId)],
-        });
-        await conversation.save();
-      } catch (err: any) {
-        console.log('Conversation creation error in sendMessage:', err);
-        
-        // If there's a duplicate key error, try to fetch the conversation again
-        if (err.code === 11000) {
-          // Wait a moment to ensure the database has completed any pending writes
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          conversation = await Conversation.findOne({
-            $or: [
-              { participants: { $all: [req.user._id, new mongoose.Types.ObjectId(recipientId)] } },
-              { participants: { $all: [new mongoose.Types.ObjectId(recipientId), req.user._id] } }
-            ]
-          });
-            
-          if (!conversation) {
-            return res.status(500).json({ message: 'Failed to get or create conversation' });
-          }
-        } else {
-          throw err;
-        }
-      }
+    if (!conversation || !conversation.id) {
+      console.error('Failed to get or create conversation');
+      return res.status(500).json({ message: 'Failed to create conversation' });
     }
 
-    // Create new message
-    const newMessage = new Message({
-      sender: req.user._id,
-      recipient: recipientId,
-      conversation: conversation._id,
+    console.log(`Created/retrieved conversation: ${conversation.id}`);
+
+    // Create message object
+    const message = {
+      sender_id: req.user._id.toString(),
+      recipient_id: recipientId,
+      conversation_id: conversation.id,
       text,
-      mediaUrl,
-      mediaType,
-    });
+      media_url: mediaUrl,
+      media_type: mediaType,
+      read: false
+    };
 
-    const savedMessage = await newMessage.save();
-    // Update last message in conversation
-    conversation.lastMessage = savedMessage._id;
-    await conversation.save();
+    // Send message
+    const savedMessage = await messageService.sendMessage(message);
+    
+    if (!savedMessage) {
+      console.error('Failed to save message');
+      return res.status(500).json({ message: 'Failed to save message' });
+    }
+    
+    console.log(`Message saved with ID: ${savedMessage.id}`);
+    
+    // Return message with user info
+    const populatedMessage = {
+      ...savedMessage,
+      sender: {
+        _id: req.user._id,
+        username: req.user.username,
+        name: req.user.name,
+        profilePicture: req.user.profilePicture
+      },
+      recipient: {
+        _id: recipient._id,
+        username: recipient.username,
+        name: recipient.name,
+        profilePicture: recipient.profilePicture
+      }
+    };
 
-    // Populate sender and recipient info
-    await savedMessage.populate('sender', '_id username name profilePicture');
-    await savedMessage.populate('recipient', '_id username name profilePicture');
-
-    res.status(201).json(savedMessage);
-  } catch (error) {
+    // Return message wrapped in object to match frontend expectations
+    res.status(201).json({ message: populatedMessage });
+  } catch (error: any) {
     console.error('Send message error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error details:', error.stack);
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -170,49 +136,23 @@ export const sendMessage = async (req: Request, res: Response) => {
 export const getMessages = async (req: Request, res: Response) => {
   try {
     const { conversationId } = req.params;
-
-    // Check if conversation exists and user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      participants: { $in: [req.user._id] },
-    });
-
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found or not authorized' });
-    }
-
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const skip = (page - 1) * limit;
+    const limit = parseInt(req.query.limit as string) || 100;
 
-    const messages = await Message.find({ conversation: conversationId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('sender', '_id username name profilePicture')
-      .populate('recipient', '_id username name profilePicture');
+    // console.log(`API request for messages: conversation=${conversationId}, page=${page}, limit=${limit}`);
+    
+    // Get messages from Supabase
+    const result = await messageService.getMessages(conversationId, page, limit);
+    
+    // Here we would typically populate user data, but that would require additional queries
+    // to get user info for each message. For simplicity, we're returning the raw messages.
+    // In a production app, you'd fetch the user data from the users table in Supabase
+    // and merge it with the message data.
 
-    // Mark unread messages as read
-    await Message.updateMany(
-      {
-        conversation: conversationId,
-        sender: { $ne: req.user._id },
-        read: false,
-      },
-      { read: true }
-    );
-
-    const total = await Message.countDocuments({ conversation: conversationId });
-
-    res.json({
-      messages: messages.reverse(), // Return in chronological order
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      totalMessages: total,
-    });
-  } catch (error) {
+    res.json(result);
+  } catch (error: any) {
     console.error('Get messages error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
@@ -221,28 +161,43 @@ export const getMessages = async (req: Request, res: Response) => {
 // @access  Private
 export const getUnreadCount = async (req: Request, res: Response) => {
   try {
-    // Make sure req.user._id is valid
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // Ensure user ID is a valid ObjectId
-    const userId = req.user._id.toString();
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'Invalid user ID' });
-    }
-
-    const unreadCount = await Message.countDocuments({
-      recipient: userId,
-      read: false,
-    });
-
+    const { unreadCount } = await messageService.getUnreadCount(req.user._id.toString());
     res.json({ unreadCount });
   } catch (error: any) {
     console.error('Get unread count error:', error);
     res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message 
+      message: error.message || 'Server error'
+    });
+  }
+};
+
+// @desc    Mark messages as read in a conversation
+// @route   POST /api/chat/messages/mark_as_read
+// @access  Private
+export const markMessagesAsRead = async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.body;
+    const errors = validationResult(req);
+    
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    // Get the user ID from the authenticated user
+    const userId = req.user._id.toString();
+
+    // Mark messages as read in this conversation that were sent to this user
+    const result = await messageService.markMessagesAsRead(conversationId, userId);
+    
+    res.json({ success: true, markedMessageIds: result.markedMessageIds });
+  } catch (error: any) {
+    console.error('Error marking messages as read:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error'
     });
   }
 }; 
