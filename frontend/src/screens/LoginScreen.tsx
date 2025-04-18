@@ -9,7 +9,7 @@ interface LoginScreenProps {
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading, error, clearError } = useAuthContext();
+  const { login, isLoading, error, clearError, fetchCurrentUser } = useAuthContext();
 
   useEffect(() => {
     if (error) {
@@ -23,8 +23,16 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-    
-    await login(email, password);
+
+    try {
+      // First login with credentials
+      await login(email, password);
+
+      // Then fetch the complete user data
+      await fetchCurrentUser();
+    } catch (err) {
+      console.error('Login failed:', err);
+    }
   };
 
   return (

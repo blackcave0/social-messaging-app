@@ -1,6 +1,6 @@
-# Social Messaging App
+# Social Messaging App with Image Upload
 
-A real-time social messaging application built with React Native Expo, Express, Socket.io, and MongoDB.
+This project is a social messaging app with image upload capabilities.
 
 ## Features
 
@@ -97,4 +97,65 @@ social-messaging-app/
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.
+
+## Image Upload Implementation
+
+### Backend
+
+The backend uses:
+- **Multer**: For handling multipart/form-data and file uploads
+- **Cloudinary**: For storing images in the cloud
+- **MongoDB**: For storing post data with image URLs
+
+#### Key Files:
+- `backend/src/config/cloudinary.ts`: Cloudinary configuration
+- `backend/src/middleware/upload.ts`: Multer configuration for file uploads
+- `backend/src/controllers/postController.ts`: Handles post creation with image upload
+- `backend/src/routes/postRoutes.ts`: API routes for post operations
+
+### Frontend
+
+The frontend uses:
+- **Expo Image Picker**: For selecting images from the device
+- **Axios**: For making API requests with multipart/form-data
+- **FormData API**: For creating multipart requests
+
+#### Key Files:
+- `frontend/src/api/posts.ts`: API service for post operations
+- `frontend/src/screens/CreatePostScreen.tsx`: UI for creating posts with images
+
+## How to Use
+
+1. Create a post with text
+2. Add an image using the photo button
+3. Select a mood (optional)
+4. Click Share to upload the post with images
+
+## Environment Setup
+
+Make sure to set up your `.env` file with Cloudinary credentials:
+
+```
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+## Running the App
+
+### Backend
+```
+cd backend
+npm install
+npm run dev
+```
+
+### Frontend
+```
+cd frontend
+npm install
+npm start
+```
+
+Then run on Android with `a` or iOS with `i`. 

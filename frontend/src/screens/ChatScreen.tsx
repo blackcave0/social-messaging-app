@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  FlatList, 
-  KeyboardAvoidingView, 
-  Platform, 
-  Image 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
+import { useChatContext } from '../context/ChatContext';
 import { DEFAULT_AVATAR } from '../utils/config';
 
 interface ChatScreenProps {
@@ -19,69 +22,86 @@ interface ChatScreenProps {
   route: any;
 }
 
-// Mock messages for demo
-const mockMessages = [
-  {
-    id: '1',
-    senderId: 'other-user',
-    text: 'Hey, how are you doing?',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: '2',
-    senderId: 'current-user',
-    text: 'I\'m doing great! How about you?',
-    createdAt: new Date(Date.now() - 3000000).toISOString(),
-  },
-  {
-    id: '3',
-    senderId: 'other-user',
-    text: 'Pretty good! Just working on some projects.',
-    createdAt: new Date(Date.now() - 2400000).toISOString(),
-  },
-  {
-    id: '4',
-    senderId: 'current-user',
-    text: 'That sounds interesting. What kind of projects?',
-    createdAt: new Date(Date.now() - 1800000).toISOString(),
-  },
-  {
-    id: '5',
-    senderId: 'other-user',
-    text: 'Building a social messaging app with React Native!',
-    createdAt: new Date(Date.now() - 1200000).toISOString(),
-  },
-];
-
 export default function ChatScreen({ navigation, route }: ChatScreenProps) {
-  const { userId, name } = route.params;
+  const { chatId, userId, name } = route.params;
   const { user } = useAuthContext();
-  const [messages, setMessages] = useState(mockMessages);
+  const {
+    messages,
+    isLoading,
+    error,
+    getMessages,
+    sendMessage,
+    joinConversation,
+    leaveConversation,
+    getOrCreateConversation,
+    currentConversation,
+    clearChatError
+  } = useChatContext();
   const [newMessage, setNewMessage] = useState('');
+  const [conversationId, setConversationId] = useState<string | null>(chatId || null);
+  const [localMessages, setLocalMessages] = useState<any[]>([]);
 
-  // Set the header title to the chat partner's name
+  // Sync messages from context to local state to ensure UI updates
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log('Updating local messages from context:', messages.length);
+      setLocalMessages(messages);
+    }
+  }, [messages]);
+
   useEffect(() => {
     navigation.setOptions({
       title: name,
     });
   }, [navigation, name]);
 
-  const sendMessage = () => {
-    if (newMessage.trim() === '') return;
+  // Load or create the conversation
+  useEffect(() => {
+    const loadConversation = async () => {
+      try {
+        // If we already have a conversationId, use it
+        if (conversationId) {
+          await getMessages(conversationId);
+          joinConversation(conversationId);
+          return;
+        }
 
-    const message = {
-      id: Date.now().toString(),
-      senderId: 'current-user',
-      text: newMessage,
-      createdAt: new Date().toISOString(),
+        // Otherwise create a new conversation with the user
+        const conversation = await getOrCreateConversation(userId);
+        if (conversation) {
+          setConversationId(conversation._id);
+          await getMessages(conversation._id);
+          joinConversation(conversation._id);
+        }
+      } catch (err) {
+        console.error('Error loading conversation:', err);
+      }
     };
 
-    setMessages([...messages, message]);
-    setNewMessage('');
+    loadConversation();
+
+    // Clean up on unmount
+    return () => {
+      if (conversationId) {
+        leaveConversation(conversationId);
+      }
+    };
+  }, [userId, conversationId]);
+
+  const handleSendMessage = async () => {
+    if (newMessage.trim() === '') return;
+
+    try {
+      await sendMessage(userId, newMessage);
+      setNewMessage('');
+    } catch (err) {
+      console.error('Error sending message:', err);
+      Alert.alert('Error', 'Failed to send message');
+    }
   };
 
-  const renderMessage = ({ item }: any) => {
-    const isCurrentUser = item.senderId === 'current-user';
+  const renderMessage = useCallback(({ item }: any) => {
+    const isCurrentUser = item.sender._id === user?._id;
 
     return (
       <View style={[
@@ -89,9 +109,9 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
         isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
       ]}>
         {!isCurrentUser && (
-          <Image 
-            source={{ uri: DEFAULT_AVATAR }} 
-            style={styles.avatar} 
+          <Image
+            source={{ uri: item.sender.profilePicture || DEFAULT_AVATAR }}
+            style={styles.avatar}
           />
         )}
         <View style={[
@@ -110,22 +130,60 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
         </View>
       </View>
     );
-  };
+  }, [user]);
+
+  // Show a loading indicator while fetching messages
+  if (isLoading && messages.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4B0082" />
+      </View>
+    );
+  }
+
+  // Show an error message if there was a problem
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            clearChatError();
+            if (conversationId) {
+              getMessages(conversationId);
+            } else {
+              getOrCreateConversation(userId);
+            }
+          }}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <FlatList
-        data={messages}
+        data={localMessages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         contentContainerStyle={styles.messagesList}
         inverted={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No messages yet</Text>
+            <Text style={styles.emptySubText}>Start the conversation!</Text>
+          </View>
+        }
       />
-      
+
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -135,15 +193,15 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
           placeholderTextColor="#999"
           multiline
         />
-        <TouchableOpacity 
-          style={styles.sendButton} 
-          onPress={sendMessage}
+        <TouchableOpacity
+          style={styles.sendButton}
+          onPress={handleSendMessage}
           disabled={newMessage.trim() === ''}
         >
-          <Ionicons 
-            name="send" 
-            size={24} 
-            color={newMessage.trim() === '' ? '#ccc' : '#4B0082'} 
+          <Ionicons
+            name="send"
+            size={24}
+            color={newMessage.trim() === '' ? '#ccc' : '#4B0082'}
           />
         </TouchableOpacity>
       </View>
@@ -156,8 +214,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#4B0082',
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    height: 300,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
   messagesList: {
     padding: 10,
+    flexGrow: 1,
   },
   messageContainer: {
     flexDirection: 'row',

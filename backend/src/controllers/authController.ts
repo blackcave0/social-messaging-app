@@ -47,6 +47,8 @@ export const registerUser = async (req: Request, res: Response) => {
       username: user.username,
       email: user.email,
       name: user.name,
+      bio: user.bio,
+      profilePicture: user.profilePicture,
       token,
     });
   } catch (error) {
@@ -90,6 +92,8 @@ export const loginUser = async (req: Request, res: Response) => {
       username: user.username,
       email: user.email,
       name: user.name,
+      bio: user.bio,
+      profilePicture: user.profilePicture,
       token,
     });
   } catch (error) {
@@ -103,10 +107,33 @@ export const loginUser = async (req: Request, res: Response) => {
 // @access  Private
 export const getCurrentUser = async (req: Request, res: Response) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    res.json(user);
+    // User is already attached to req by the auth middleware
+    const user = req.user;
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Return the user without sensitive information
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        bio: user.bio,
+        profilePicture: user.profilePicture,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
   } catch (error) {
     console.error('Get current user error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
+    });
   }
 }; 

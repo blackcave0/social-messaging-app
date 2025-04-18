@@ -38,11 +38,27 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return;
     }
 
-    await register(name, username, email, password);
+    try {
+      console.log('Attempting to register with:', { name, username, email });
+      await register(name, username, email, password);
+
+      // Registration successful - no need to fetch user data again
+      console.log('Registration successful');
+
+      // Show success message
+      Alert.alert(
+        'Registration Successful',
+        'Your account has been created successfully!',
+        [{ text: 'OK' }]
+      );
+    } catch (err) {
+      console.error('Registration error in component:', err);
+      Alert.alert('Registration Error', 'Failed to register. Please try again later.');
+    }
   };
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.scrollView}
       contentContainerStyle={styles.scrollViewContent}
     >

@@ -11,6 +11,8 @@ export interface IUser extends Document {
   followers: mongoose.Types.ObjectId[];
   following: mongoose.Types.ObjectId[];
   friendRequests: mongoose.Types.ObjectId[];
+  blockedUsers: mongoose.Types.ObjectId[];
+  posts: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -65,6 +67,18 @@ const userSchema = new Schema<IUser>(
       {
         type: Schema.Types.ObjectId,
         ref: 'User',
+      },
+    ],
+    blockedUsers: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    posts: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Post',
       },
     ],
   },

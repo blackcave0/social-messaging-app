@@ -26,8 +26,35 @@ const conversationSchema = new Schema<IConversation>(
   }
 );
 
-// Ensure there's only one conversation between two users
-conversationSchema.index({ participants: 1 }, { unique: true });
+// Drop existing indexes before creating new ones
+mongoose.connection.once('open', async () => {
+  try {
+    // Only run in development to avoid production issues
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Attempting to drop conversation index');
+      const indexes = await mongoose.connection.db
+        .collection('conversations')
+        .listIndexes()
+        .toArray();
+      
+      const participantsIndex = indexes.find(
+        (index) => index.key && index.key.participants === 1 && index.unique
+      );
+      
+      if (participantsIndex) {
+        await mongoose.connection.db
+          .collection('conversations')
+          .dropIndex(participantsIndex.name);
+        console.log('Dropped conversation participants index');
+      }
+    }
+  } catch (error) {
+    console.warn('Error dropping index:', error);
+  }
+});
+
+// Create a standard index without uniqueness constraint
+conversationSchema.index({ participants: 1 });
 
 const Conversation = mongoose.model<IConversation>('Conversation', conversationSchema);
 

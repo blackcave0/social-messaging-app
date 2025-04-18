@@ -1,20 +1,23 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   Switch,
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import useAuth from '../hooks/useAuth';
+import { useAuthContext } from '../context/AuthContext';
 
-const SettingsScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const { logout } = useAuth();
+interface UserProfileProps {
+  navigation: any
+}
+const SettingsScreen = ({ navigation }: UserProfileProps) => {
+  // const navigation = useNavigation();
+  const { logout } = useAuthContext();
   const [darkMode, setDarkMode] = React.useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
 
@@ -27,11 +30,11 @@ const SettingsScreen: React.FC = () => {
           text: "Cancel",
           style: "cancel"
         },
-        { 
-          text: "Logout", 
+        {
+          text: "Logout",
           onPress: () => {
+            // The updated logout() function in AuthContext will handle everything
             logout();
-            // Navigation will be handled by the AuthProvider
           },
           style: "destructive"
         }
@@ -45,20 +48,20 @@ const SettingsScreen: React.FC = () => {
   };
 
   const renderSettingItem = (
-    icon: string, 
-    title: string, 
-    onPress?: () => void, 
+    icon: string,
+    title: string,
+    onPress?: () => void,
     rightElement?: React.ReactNode,
     color?: string
   ) => (
-    <TouchableOpacity 
-      style={styles.settingItem} 
+    <TouchableOpacity
+      style={styles.settingItem}
       onPress={onPress}
       disabled={!onPress}
     >
       <View style={styles.settingItemLeft}>
         <Ionicons name={icon as any} size={24} color={color || "#333"} style={styles.icon} />
-        <Text style={[styles.settingTitle, color ? {color} : null]}>{title}</Text>
+        <Text style={[styles.settingTitle, color ? { color } : null]}>{title}</Text>
       </View>
       <View style={styles.settingItemRight}>
         {rightElement || (
@@ -73,7 +76,7 @@ const SettingsScreen: React.FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
         {renderSettingItem('person-outline', 'Edit Profile', handleEditProfile)}
-        {renderSettingItem('key-outline', 'Change Password', () => 
+        {renderSettingItem('key-outline', 'Change Password', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
         {renderSettingItem('log-out-outline', 'Logout', handleLogout, undefined, '#FF3B30')}
@@ -82,8 +85,8 @@ const SettingsScreen: React.FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
         {renderSettingItem(
-          'moon-outline', 
-          'Dark Mode', 
+          'moon-outline',
+          'Dark Mode',
           undefined,
           <Switch
             value={darkMode}
@@ -93,8 +96,8 @@ const SettingsScreen: React.FC = () => {
           />
         )}
         {renderSettingItem(
-          'notifications-outline', 
-          'Notifications', 
+          'notifications-outline',
+          'Notifications',
           undefined,
           <Switch
             value={notificationsEnabled}
@@ -103,37 +106,37 @@ const SettingsScreen: React.FC = () => {
             thumbColor={notificationsEnabled ? "#fff" : "#f4f3f4"}
           />
         )}
-        {renderSettingItem('language-outline', 'Language', () => 
+        {renderSettingItem('language-outline', 'Language', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Privacy & Security</Text>
-        {renderSettingItem('lock-closed-outline', 'Privacy Settings', () => 
+        {renderSettingItem('lock-closed-outline', 'Privacy Settings', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
-        {renderSettingItem('shield-checkmark-outline', 'Security', () => 
+        {renderSettingItem('shield-checkmark-outline', 'Security', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
-        {renderSettingItem('eye-off-outline', 'Blocked Users', () => 
+        {renderSettingItem('eye-off-outline', 'Blocked Users', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
-        {renderSettingItem('help-circle-outline', 'Help Center', () => 
+        {renderSettingItem('help-circle-outline', 'Help Center', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
-        {renderSettingItem('mail-outline', 'Contact Us', () => 
+        {renderSettingItem('mail-outline', 'Contact Us', () =>
           Alert.alert('Coming Soon', 'This feature will be available soon!')
         )}
-        {renderSettingItem('information-circle-outline', 'About', () => 
+        {renderSettingItem('information-circle-outline', 'About', () =>
           Alert.alert('About', 'Social Messaging App v1.0.0\nCreated with React Native and Expo')
         )}
       </View>
-      
+
       <View style={styles.footer}>
         <Text style={styles.footerText}>Social Messaging App v1.0.0</Text>
       </View>
