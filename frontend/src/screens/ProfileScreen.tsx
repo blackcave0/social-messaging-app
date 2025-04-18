@@ -123,7 +123,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   // Check if returning from edit profile
   useEffect(() => {
     if (route.params?.editComplete) {
-      console.log('Returning from edit profile, refreshing data...');
+      // console.log('Returning from edit profile, refreshing data...');
       setInitialDataLoaded(false); // Reset so useFocusEffect will refresh data
 
       // Clear the parameter so it doesn't trigger again
@@ -138,8 +138,8 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
       const refreshUserData = async () => {
         if (!initialDataLoaded && isMounted && user) {
+          // console.log('Initial user data load');
           try {
-            console.log('Initial user data load');
             await fetchCurrentUser();
             if (isMounted) setInitialDataLoaded(true); // Check mount status before setting state
           } catch (error) {
@@ -151,7 +151,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       // Fetch user data and then posts
       refreshUserData().then(() => {
         if (isMounted && user) {
-          console.log('useFocusEffect: Loading posts');
+          // console.log('useFocusEffect: Loading posts');
           loadUserPosts();
           fetchUserPostsFromBackend();
         }
@@ -189,7 +189,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           : undefined
       }));
       setDisplayPosts(posts);
-      console.log('Processed backend posts:', posts.length);
+      // console.log('Processed backend posts:', posts.length);
     } else {
       const posts = userPosts.map(post => ({
         _id: post._id,
@@ -198,18 +198,18 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         imageUrl: post.images && post.images.length > 0 ? post.images[0] : undefined
       }));
       setDisplayPosts(posts);
-      console.log(userPosts.length > 0 ? 'Using local posts:' : 'No posts to display', posts.length);
+      // console.log(userPosts.length > 0 ? 'Using local posts:' : 'No posts to display', posts.length);
     }
   }, [backendPosts, userPosts]); // Keep original dependencies
 
   // Fetch followers and following details
   const fetchFollowersAndFollowing = async () => {
     if (!user?._id || !user?.token) {
-      console.log('No user data, skip fetching followers');
+      // console.log('No user data, skip fetching followers');
       return;
     }
 
-    console.log('Fetching followers/following for user ID:', user._id, 'with token length:', user.token.length);
+    // console.log('Fetching followers/following for user ID:', user._id, 'with token length:', user.token.length);
 
     try {
       setLoadingFollowers(true);
@@ -222,8 +222,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       });
 
       if (response.data) {
-        // Log the entire response data to inspect its structure
-        console.log('User data response received');
+        // console.log('User data response received');
 
         // Check if followers and following are arrays
         let followersArray: FollowerUser[] = [];
@@ -233,27 +232,27 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         if (Array.isArray(response.data.followers)) {
           followersArray = response.data.followers;
         } else if (response.data.followers) {
-          console.log('Unexpected followers structure:', typeof response.data.followers);
+          // console.log('Unexpected followers structure:', typeof response.data.followers);
         }
 
         if (Array.isArray(response.data.following)) {
           followingArray = response.data.following;
         } else if (response.data.following) {
-          console.log('Unexpected following structure:', typeof response.data.following);
+          // console.log('Unexpected following structure:', typeof response.data.following);
         }
 
         // Additional validation - make sure each item has _id
         followersArray = followersArray.filter(item => item && typeof item === 'object' && item._id);
         followingArray = followingArray.filter(item => item && typeof item === 'object' && item._id);
 
-        console.log('After validation - Followers count:', followersArray.length);
-        console.log('After validation - Following count:', followingArray.length);
+        // console.log('After validation - Followers count:', followersArray.length);
+        // console.log('After validation - Following count:', followingArray.length);
 
         // Set the state with validated arrays
         setFollowers(followersArray);
         setFollowing(followingArray);
 
-        console.log(`Loaded ${followersArray.length} followers and ${followingArray.length} following`);
+        // console.log(`Loaded ${followersArray.length} followers and ${followingArray.length} following`);
       }
     } catch (err: any) {
       console.error('Error fetching followers/following:', err);
@@ -272,7 +271,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
             (item: any) => item && typeof item === 'object' && item._id
           );
           setFollowers(validFollowers);
-          console.log(`Loaded ${validFollowers.length} followers from followers endpoint`);
+          // console.log(`Loaded ${validFollowers.length} followers from followers endpoint`);
         }
       } catch (followersErr: any) {
         console.error('Error fetching followers from dedicated endpoint:', followersErr);
@@ -297,7 +296,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
             (item: any) => item && typeof item === 'object' && item._id
           );
           setFollowing(validFollowing);
-          console.log(`Loaded ${validFollowing.length} following from following endpoint`);
+          // console.log(`Loaded ${validFollowing.length} following from following endpoint`);
         }
       } catch (followingErr: any) {
         console.error('Error fetching following from dedicated endpoint:', followingErr);
@@ -316,11 +315,11 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   // Add this to the refresh function
   const handleRefresh = async () => {
     if (refreshing || loading) {
-      console.log('Already refreshing, skip duplicate refresh');
+      // console.log('Already refreshing, skip duplicate refresh');
       return;
     }
 
-    console.log('Manual refresh triggered');
+    // console.log('Manual refresh triggered');
     setInitialDataLoaded(false); // Allow user data refresh
     setError(null); // Clear errors on refresh
 
@@ -338,7 +337,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     // First load the data
     await fetchFollowersAndFollowing();
     // Then show the modal
-    console.log('Setting followers modal to true after data fetch');
+    // console.log('Setting followers modal to true after data fetch');
     setShowFollowersModal(true);
   };
 
@@ -347,7 +346,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     // First load the data
     await fetchFollowersAndFollowing();
     // Then show the modal
-    console.log('Setting following modal to true after data fetch');
+    // console.log('Setting following modal to true after data fetch');
     setShowFollowingModal(true);
   };
 
@@ -374,7 +373,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       return;
     }
 
-    console.log('Attempting to follow user:', userId);
+    // console.log('Attempting to follow user:', userId);
 
     // Set this specific user's follow action as in progress
     setFollowingInProgress(prev => ({ ...prev, [userId]: true }));
@@ -393,7 +392,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       );
 
       if (response.data.success) {
-        console.log('Follow success response:', response.data);
+        // console.log('Follow success response:', response.data);
 
         // Safely update following list with full validation
         if (response.data.user && response.data.user._id) {
@@ -442,7 +441,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           });
 
           // No alert - UI has been updated immediately
-          console.log('Successfully followed user, UI updated');
+          // console.log('Successfully followed user, UI updated');
         } else {
           console.warn('Invalid user object in follow response:', response.data);
         }
@@ -734,7 +733,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
   // Add effect to log when modal visibility changes and validate data
   useEffect(() => {
-    console.log('Followers modal visibility changed to:', showFollowersModal);
+    // console.log('Followers modal visibility changed to:', showFollowersModal);
     if (showFollowersModal) {
       // Validate followers data when modal opens
       if (!Array.isArray(followers)) {
@@ -747,13 +746,13 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           console.warn(`Fixed ${followers.length - validFollowers.length} invalid follower items`);
           setFollowers(validFollowers);
         }
-        console.log('Followers count when modal opened:', validFollowers.length);
+        // console.log('Followers count when modal opened:', validFollowers.length);
       }
     }
   }, [showFollowersModal, followers]);
 
   useEffect(() => {
-    console.log('Following modal visibility changed to:', showFollowingModal);
+    // console.log('Following modal visibility changed to:', showFollowingModal);
     if (showFollowingModal) {
       // Validate following data when modal opens
       if (!Array.isArray(following)) {
@@ -766,7 +765,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           console.warn(`Fixed ${following.length - validFollowing.length} invalid following items`);
           setFollowing(validFollowing);
         }
-        console.log('Following count when modal opened:', validFollowing.length);
+        // console.log('Following count when modal opened:', validFollowing.length);
       }
     }
   }, [showFollowingModal, following]);
@@ -774,7 +773,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   // --- Keep original functions (loadUserPosts, fetchUserPostsFromBackend, handleRefresh, handleEditProfile, handleSettings) ---
   const loadUserPosts = () => {
     if (user?._id) { // Check user._id
-      console.log('Loading user posts from local storage');
+      // console.log('Loading user posts from local storage');
       const posts = getUserPosts(user._id);
       setUserPosts(posts);
     }
@@ -782,12 +781,12 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
   const fetchUserPostsFromBackend = async () => {
     if (!user || !user._id) {
-      console.log('No user found, skipping post fetch');
+      // console.log('No user found, skipping post fetch');
       return;
     }
 
     if (loading) {
-      console.log('Already loading posts, skipping duplicate fetch');
+      // console.log('Already loading posts, skipping duplicate fetch');
       return;
     }
 
@@ -799,7 +798,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     }
 
     if (!token) {
-      console.log('No token found in user data');
+      // console.log('No token found in user data');
       // setError might be better here if needed
       return;
     }
@@ -809,7 +808,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       setLoading(true);
       setError(null);
 
-      console.log('Fetching posts from backend...');
+      // console.log('Fetching posts from backend...');
 
       const apiClient = axios.create({
         baseURL: `${API_URL}/api`,
@@ -830,7 +829,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         // Sort posts by creation date, newest first
         userPosts.sort((a: BackendPost, b: BackendPost) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setBackendPosts(userPosts);
-        console.log(`Found ${userPosts.length} posts for user ${user._id}`);
+        // console.log(`Found ${userPosts.length} posts for user ${user._id}`);
       } else {
         const message = response.data?.message || 'Failed to fetch posts';
         console.error('API returned error:', message);
@@ -867,7 +866,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     if (rootNavigation) {
       rootNavigation.navigate('ChatList');
     } else {
-      console.error('Could not access root navigation');
+      // console.error('Could not access root navigation');
     }
   };
   // --- End of original functions ---
@@ -890,7 +889,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         try {
           // Using push instead of navigate ensures we put a new screen on the stack
           // rather than potentially replacing one
-          console.log('Pushing PostDetails screen to navigation stack');
+          // console.log('Pushing PostDetails screen to navigation stack');
           navigation.push('PostDetails', {
             postId: item._id,
             userId: user?._id // Pass current user ID to filter posts
@@ -909,7 +908,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         <Image
           source={{ uri: item.imageUrl }}
           style={styles.postImage} // Image fills the container
-          onError={(e) => console.log(`Failed to load image ${item.imageUrl}:`, e.nativeEvent.error)} // Optional: Add error logging for images
+          onError={(e) => {/* console.log(`Failed to load image ${item.imageUrl}:`, e.nativeEvent.error) */ }} // Optional: Add error logging for images
         />
       ) : (
         <View style={styles.textPostContainer}>
@@ -1040,7 +1039,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         transparent={false}
         statusBarTranslucent={false}
         onRequestClose={() => {
-          console.log('Modal closing via back button');
+          // console.log('Modal closing via back button');
           setShowFollowersModal(false);
         }}
       >
@@ -1050,7 +1049,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               <TouchableOpacity
                 style={styles.modalBackButton}
                 onPress={() => {
-                  console.log('Close button pressed');
+                  // console.log('Close button pressed');
                   setShowFollowersModal(false);
                 }}
               >
@@ -1075,10 +1074,10 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
                 data={followers.filter(item => item && item._id)}
                 renderItem={({ item }) => {
                   if (!item || !item._id) {
-                    console.log('Skipping invalid follower item');
+                    // console.log('Skipping invalid follower item');
                     return null;
                   }
-                  console.log('Rendering follower item:', item._id);
+                  // console.log('Rendering follower item:', item._id);
                   // Add isFollowed flag to force UI update
                   const isFollowed = following.some(f => f._id === item._id) || item.isNowFollowed === true;
                   return renderUserItem({
@@ -1110,7 +1109,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         transparent={false}
         statusBarTranslucent={false}
         onRequestClose={() => {
-          console.log('Modal closing via back button');
+          // console.log('Modal closing via back button');
           setShowFollowingModal(false);
         }}
       >
@@ -1120,7 +1119,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               <TouchableOpacity
                 style={styles.modalBackButton}
                 onPress={() => {
-                  console.log('Close button pressed');
+                  // console.log('Close button pressed');
                   setShowFollowingModal(false);
                 }}
               >
@@ -1145,10 +1144,10 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
                 data={following.filter(item => item && item._id)}
                 renderItem={({ item }) => {
                   if (!item || !item._id) {
-                    console.log('Skipping invalid following item');
+                    // console.log('Skipping invalid following item');
                     return null;
                   }
-                  console.log('Rendering following item:', item._id);
+                  // console.log('Rendering following item:', item._id);
                   return renderUserItem({
                     item,
                     handleAction: handleUnfollow,
@@ -1158,7 +1157,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
                   if (!item || !item._id) {
                     return `invalid-${Math.random()}`;
                   }
-                  console.log('Key for following item:', item._id);
+                  // console.log('Key for following item:', item._id);
                   return `following-${item._id}`;
                 }}
                 contentContainerStyle={styles.userListContainer}

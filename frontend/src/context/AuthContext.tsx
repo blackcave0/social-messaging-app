@@ -81,14 +81,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!state.user || !state.user.token) {
         const userString = await AsyncStorage.getItem('user');
         if (!userString) {
-          console.log('No authenticated user found in state or storage');
+          // console.log('No authenticated user found in state or storage');
           return; // Just return instead of throwing
         }
 
         // Try to get user from storage
         const storedUser = JSON.parse(userString);
         if (!storedUser || !storedUser.token) {
-          console.log('Invalid user data in storage');
+          // console.log('Invalid user data in storage');
           return;
         }
 
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
           setState(prev => ({ ...prev, user: updatedUser }));
-          console.log('User data refreshed from storage successfully');
+          // console.log('User data refreshed from storage successfully');
         }
 
         return;
@@ -139,10 +139,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           user: updatedUser,
         }));
 
-        console.log('User data refreshed successfully');
+        // console.log('User data refreshed successfully');
       }
     } catch (error: any) {
-      console.error('Error fetching current user:', error);
+      // console.error('Error fetching current user:', error);
       // Don't throw - just log the error and continue
     }
   };
@@ -170,7 +170,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoading: false,
       }));
     } catch (error: any) {
-      console.error('Login error:', error);
+      // console.error('Login error:', error);
       setState(prev => ({
         ...prev,
         error: error.response?.data?.message || 'Login failed. Please try again.',
@@ -183,8 +183,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      console.log('Sending registration request to:', `${API_URL}/api/auth/register`);
-      console.log('Registration data:', { name, username, email, password: '***' });
+      // console.log('Sending registration request to:', `${API_URL}/api/auth/register`);
+      // console.log('Registration data:', { name, username, email, password: '***' });
 
       const res = await axios.post(`${API_URL}/api/auth/register`, {
         name,
@@ -198,7 +198,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
 
-      console.log('Registration response:', res.data);
+      // console.log('Registration response:', res.data);
       const user = res.data;
 
       // Set token in axios header
@@ -217,7 +217,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Instead of trying to fetch the user data immediately, let the app
       // continue with the basic user data we already have from registration
     } catch (error: any) {
-      console.error('Registration error details:', error.message);
+      // console.error('Registration error details:', error.message);
 
       // Handle network errors specifically
       if (error.code === 'ECONNABORTED') {
@@ -260,10 +260,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       // No navigation code needed here - the AppNavigator will handle it
-      console.log('User logged out successfully');
+      // console.log('User logged out successfully');
 
     } catch (error: any) {
-      console.error('Logout error:', error);
+      // console.error('Logout error:', error);
       setState(prev => ({
         ...prev,
         error: 'Logout failed. Please try again.',
@@ -294,9 +294,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user: updatedUser,
       }));
 
-      console.log('User updated successfully:', updatedUser);
+      // console.log('User updated successfully:', updatedUser);
     } catch (error: any) {
-      console.error('Update user error:', error);
+      // console.error('Update user error:', error);
       throw new Error(error.message || 'Failed to update user');
     }
   };

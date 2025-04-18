@@ -66,7 +66,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     // Check if we came from a user profile or somewhere else
     const fromUserProfile = !!userId;
 
-    console.log('Going back from PostDetails, fromUserProfile:', fromUserProfile);
+    // console.log('Going back from PostDetails, fromUserProfile:', fromUserProfile);
 
     if (fromUserProfile && navigation.canGoBack()) {
       // If we came from a user profile, try to go back to that profile
@@ -108,16 +108,16 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   // Fetch all posts
   const fetchPosts = useCallback(async () => {
     try {
-      console.log('Requesting all posts from:', `${API_URL}/api/posts`);
+      // console.log('Requesting all posts from:', `${API_URL}/api/posts`);
       const response = await axios.get<{ data: Post[] }>(`${API_URL}/api/posts`);
 
       let filteredPosts = response.data.data;
 
       // Filter posts by user ID if it's provided (coming from a user profile)
       if (userId) {
-        console.log(`Filtering posts for user: ${userId}`);
+        // console.log(`Filtering posts for user: ${userId}`);
         filteredPosts = filteredPosts.filter(post => post.user && post.user._id === userId);
-        console.log(`Found ${filteredPosts.length} posts for user ${userId}`);
+        // console.log(`Found ${filteredPosts.length} posts for user ${userId}`);
 
         // Update header title if we have posts
         if (filteredPosts.length > 0 && filteredPosts[0].user.name) {
@@ -126,7 +126,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         }
       } else {
-        console.log('Showing all posts:', filteredPosts.length);
+        // console.log('Showing all posts:', filteredPosts.length);
       }
 
       setPosts(filteredPosts);
@@ -186,7 +186,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
     try {
       // *** IMPORTANT: Add your actual API call here ***
-      console.log(`Simulating API call: ${isLiked ? 'Unlike' : 'Like'} post ${postId}`);
+      // console.log(`Simulating API call: ${isLiked ? 'Unlike' : 'Like'} post ${postId}`);
       // Example API call (uncomment and adapt)
       // await axios.post(`${API_URL}/api/posts/${postId}/like`);
       await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
@@ -211,7 +211,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   // Handle post press - since we're already in post details, this just selects the post
   const handlePostPress = (postId: string) => {
     // Find the post and scroll to it or highlight it
-    console.log('Selected post:', postId);
+    // console.log('Selected post:', postId);
 
     // If needed, you could re-fetch the specific post details
     // or update UI to show this post is selected

@@ -31,7 +31,7 @@ mongoose.connection.once('open', async () => {
   try {
     // Only run in development to avoid production issues
     if (process.env.NODE_ENV !== 'production') {
-      console.log('Attempting to drop conversation index');
+      // console.log('Attempting to drop conversation index');
       const indexes = await mongoose.connection.db
         .collection('conversations')
         .listIndexes()
@@ -45,7 +45,7 @@ mongoose.connection.once('open', async () => {
         await mongoose.connection.db
           .collection('conversations')
           .dropIndex(participantsIndex.name);
-        console.log('Dropped conversation participants index');
+        // console.log('Dropped conversation participants index');
       }
     }
   } catch (error) {
