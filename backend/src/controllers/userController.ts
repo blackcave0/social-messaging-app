@@ -2,6 +2,10 @@ import { Request, Response } from 'express';
 import User from '../models/User';
 import mongoose, { Types } from 'mongoose';
 import { createNotification } from './notificationController';
+import cloudinary, { uploadToCloudinary } from '../config/cloudinary';
+import fs from 'fs';
+import path from 'path';
+import { CloudinaryUploadResult } from '../config/cloudinary';
 
 // @desc    Get user profile
 // @route   GET /api/users/:id
@@ -225,23 +229,42 @@ export const uploadProfilePicture = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    // Generate URL for the uploaded file
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const profilePicture = `${baseUrl}/uploads/${req.file.filename}`;
-
-    // Update user's profile picture
-    user.profilePicture = profilePicture;
+    
+    let profilePictureUrl;
+    
+    try {
+      console.log('Attempting to upload to Cloudinary...');
+      // Upload directly from buffer to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: 'social-app/profile_pictures',
+        resource_type: 'auto',
+      }) as CloudinaryUploadResult;
+      
+      console.log('Cloudinary upload successful:', result.secure_url);
+      profilePictureUrl = result.secure_url;
+    } catch (cloudinaryError: any) {
+      console.error('Cloudinary upload failed:', cloudinaryError);
+      return res.status(500).json({ 
+        message: 'Failed to upload to Cloudinary', 
+        error: cloudinaryError.message || 'Unknown error'
+      });
+    }
+    
+    // Update user's profile picture with the Cloudinary URL
+    user.profilePicture = profilePictureUrl;
     await user.save();
-
+    
     res.json({ 
       success: true, 
-      profilePicture,
+      profilePicture: profilePictureUrl,
       message: 'Profile picture uploaded successfully' 
     });
-  } catch (error) {
-    console.error('Upload profile picture error:', error);
-    res.status(500).json({ message: 'Server error' });
+  } catch (error: any) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({ 
+      message: 'Failed to upload profile picture', 
+      error: error.message || 'Unknown error'
+    });
   }
 };
 
