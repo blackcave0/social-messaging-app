@@ -9,9 +9,9 @@ import mongoose from 'mongoose';
 // Create a new post with images
 export const createPost = async (req: Request, res: Response) => {
   try {
-    // console.log('Create post request received');
-    // console.log('Request body:', req.body);
-    // console.log('Files:', req.files || req.file || 'No files');
+    console.log('Create post request received');
+    console.log('Request body:', req.body);
+    console.log('Files:', req.files || req.file || 'No files');
     
     const { description, mood } = req.body;
     
@@ -22,7 +22,7 @@ export const createPost = async (req: Request, res: Response) => {
     }
     
     const userId = req.user._id;
-    // console.log('User ID from request:', userId);
+    console.log('User ID from request:', userId);
 
     // Check if user exists in database
     const user = await User.findById(userId);
@@ -35,24 +35,60 @@ export const createPost = async (req: Request, res: Response) => {
     let imageUrls: string[] = [];
     
     if (req.files && Array.isArray(req.files)) {
-      // console.log(`Processing ${req.files.length} files`);
+      console.log(`Processing ${req.files.length} files`);
       
       // Upload each file to Cloudinary
       const uploadPromises = req.files.map(async (file, index) => {
         try {
-          // console.log(`Uploading file ${index + 1}:`, file.path);
-          
-          // Upload to Cloudinary
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: 'social-app/posts',
+          console.log(`Uploading file ${index + 1}:`, {
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+            hasBuffer: !!file.buffer,
+            hasPath: !!file.path
           });
           
-          // console.log(`File ${index + 1} uploaded successfully:`, result.secure_url);
-          
-          // Delete local file after upload
-          fs.unlinkSync(file.path);
-          
-          return result.secure_url;
+          // Check if file has buffer property (from multer memory storage)
+          if (file.buffer) {
+            // Upload from buffer
+            return new Promise<string>((resolve, reject) => {
+              const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                  folder: `social-app/posts/${userId}`,
+                  resource_type: 'auto',
+                },
+                (error, result) => {
+                  if (error) {
+                    console.error(`Error uploading file ${index + 1} to Cloudinary:`, error);
+                    reject(error);
+                    return;
+                  }
+                  if (result && result.secure_url) {
+                    resolve(result.secure_url);
+                  } else {
+                    reject(new Error('No secure_url in Cloudinary response'));
+                  }
+                }
+              );
+              
+              // Write buffer to upload stream
+              uploadStream.end(file.buffer);
+            });
+          } else {
+            // Upload from file path
+            const result = await cloudinary.uploader.upload(file.path, {
+              folder: `social-app/posts/${userId}`,
+            });
+            
+            console.log(`File ${index + 1} uploaded successfully:`, result.secure_url);
+            
+            // Delete local file after upload
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+            
+            return result.secure_url;
+          }
         } catch (error) {
           console.error(`Error uploading file ${index + 1} to Cloudinary:`, error);
           throw error;
@@ -61,32 +97,82 @@ export const createPost = async (req: Request, res: Response) => {
       
       // Wait for all uploads to complete
       imageUrls = await Promise.all(uploadPromises);
-      // console.log('All files uploaded successfully. URLs:', imageUrls);
+      console.log('All files uploaded successfully. URLs:', imageUrls);
     } else if (req.file) {
       // If only a single file was uploaded
-      // console.log('Processing single file:', req.file.path);
-      
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: 'social-app/posts',
+      console.log('Processing single file:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        hasBuffer: !!req.file.buffer,
+        hasPath: !!req.file.path
       });
       
-      // console.log('File uploaded successfully:', result.secure_url);
-      
-      // Delete local file after upload
-      fs.unlinkSync(req.file.path);
-      
-      imageUrls = [result.secure_url];
+      try {
+        let imageUrl: string;
+        
+        // Check if file has buffer property (from multer memory storage)
+        if (req.file && req.file.buffer) {
+          // Upload from buffer
+          imageUrl = await new Promise<string>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              {
+                folder: 'social-app/posts',
+                resource_type: 'auto',
+              },
+              (error, result) => {
+                if (error) return reject(error);
+                if (result && result.secure_url) {
+                  resolve(result.secure_url);
+                } else {
+                  reject(new Error('No secure_url in Cloudinary response'));
+                }
+              }
+            );
+            
+            // Write buffer to upload stream
+            if (req.file && req.file.buffer) {
+              uploadStream.end(req.file.buffer);
+            } else {
+              reject(new Error('File buffer is missing'));
+            }
+          });
+          
+          console.log('File uploaded successfully:', imageUrl);
+        } else if (req.file && req.file.path) {
+          // Upload from file path
+          const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'social-app/posts',
+          });
+          
+          console.log('File uploaded successfully:', result.secure_url);
+          
+          // Delete local file after upload
+          if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+          
+          imageUrl = result.secure_url;
+        } else {
+          throw new Error('Invalid file object: missing buffer or path');
+        }
+        
+        imageUrls = [imageUrl];
+      } catch (error) {
+        console.error('Error uploading file to Cloudinary:', error);
+        throw error;
+      }
     } else {
-      // console.log('No files to upload');
+      console.log('No files to upload');
     }
 
     // Create new post
-    // console.log('Creating new post with data:', {
-    //   userId,
-    //   description,
-    //   mood,
-    //   imageCount: imageUrls.length
-    // });
+    console.log('Creating new post with data:', {
+      userId,
+      description,
+      mood,
+      imageCount: imageUrls.length
+    });
     
     const newPost = new Post({
       user: userId,
@@ -97,13 +183,13 @@ export const createPost = async (req: Request, res: Response) => {
 
     // Save post to database
     const savedPost = await newPost.save();
-    // console.log('Post saved successfully, ID:', savedPost._id);
+    console.log('Post saved successfully, ID:', savedPost._id);
 
     // Add post to user's posts
     await User.findByIdAndUpdate(userId, {
       $push: { posts: savedPost._id },
     });
-    // console.log('Post added to user document');
+    console.log('Post added to user document');
 
     res.status(201).json({
       success: true,
