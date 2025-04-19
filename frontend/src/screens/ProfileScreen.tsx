@@ -26,7 +26,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../types/navigation';
 import { API_URL } from '../utils/config'; // Import API_URL from config instead of defining it locally
-
+// import { useUserContext } from '../context/UserContext';
 interface ExtendedUser {
   _id: string;
   username: string;
@@ -939,6 +939,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   return (
     <SafeAreaLayout>
       <FlatList
+        
         data={displayPosts}
         renderItem={renderPostItem} // Use the updated render function
         keyExtractor={(item) => item._id}
