@@ -5,7 +5,7 @@ interface PostsContextType {
   posts: Post[];
   loading: boolean;
   refreshing: boolean;
-  createPost: (text: string, image?: string) => Promise<boolean>;
+  createPost: (description: string, images?: string[]) => Promise<boolean>;
   toggleLike: (postId: string) => Promise<void>;
   getUserPosts: (userId: string) => Post[];
   refreshPosts: () => Promise<void>;
