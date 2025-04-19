@@ -43,7 +43,14 @@ export default function EditProfileScreen({ navigation, route }: EditProfileScre
 
       // Launch the image picker
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images', 'videos'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      const cameraResult = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images', 'videos'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
@@ -81,18 +88,66 @@ export default function EditProfileScreen({ navigation, route }: EditProfileScre
         type: `image/${fileType}`,
       });
 
-      // Upload image to server
-      const response = await axios.post(`${API_URL}/api/users/upload-profile-picture`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      console.log(`Uploading image to ${API_URL}/api/users/upload-profile-picture`);
 
-      return response.data.profilePicture;
-    } catch (error) {
+      // Check if the API URL is accessible before attempting upload
+      try {
+        await axios.get(API_URL, { timeout: 5000 });
+      } catch (connectionError) {
+        console.error('API server not accessible:', connectionError);
+        throw new Error('Cannot connect to the server. Please check your internet connection and try again.');
+      }
+
+      // Upload image to server with timeout and retry logic
+      let retries = 2;
+      let lastError = null;
+
+      while (retries >= 0) {
+        try {
+          const response = await axios.post(`${API_URL}/api/users/upload-profile-picture`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`,
+            },
+            timeout: 30000, // 30 second timeout
+          });
+
+          if (!response.data || !response.data.profilePicture) {
+            throw new Error('Invalid response from server');
+          }
+
+          return response.data.profilePicture;
+        } catch (error: any) {
+          lastError = error;
+          console.error(`Upload attempt ${3 - retries} failed:`, error);
+
+          if (retries > 0) {
+            console.log(`Retrying upload (${retries} attempts remaining)...`);
+            // Wait for 1 second before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          retries--;
+        }
+      }
+
+      // If we've exhausted all retries, throw the last error
+      throw lastError;
+    } catch (error: any) {
       console.error('Error uploading image:', error);
-      throw new Error('Failed to upload profile picture');
+
+      // Provide more specific error messages
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Upload timed out. Please check your internet connection and try again.');
+      } else if (error.response) {
+        // Server responded with an error
+        throw new Error(`Server error: ${error.response.data?.message || 'Unknown error'}`);
+      } else if (error.request) {
+        // Request was made but no response received
+        throw new Error('Network error. Please check your internet connection and try again.');
+      } else {
+        // Something else happened
+        throw new Error(`Failed to upload profile picture: ${error.message}`);
+      }
     }
   };
 
@@ -117,7 +172,34 @@ export default function EditProfileScreen({ navigation, route }: EditProfileScre
 
       // Upload image if changed
       if (imageChanged && profilePicture !== DEFAULT_AVATAR) {
-        profilePictureUrl = await uploadImage(profilePicture);
+        try {
+          profilePictureUrl = await uploadImage(profilePicture);
+        } catch (uploadError: any) {
+          console.error('Profile picture upload failed:', uploadError);
+          Alert.alert(
+            'Upload Failed',
+            uploadError.message || 'Failed to upload profile picture. Your profile will be saved without the new picture.',
+            [
+              {
+                text: 'Continue Anyway',
+                onPress: () => console.log('User chose to continue without uploading the image')
+              },
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => {
+                  setLoading(false);
+                  return;
+                }
+              }
+            ]
+          );
+
+          // If user cancels, stop the save process
+          if (loading) {
+            return;
+          }
+        }
       }
 
       // Update user profile
@@ -147,20 +229,22 @@ export default function EditProfileScreen({ navigation, route }: EditProfileScre
         // Make sure the latest data is fetched
         await fetchCurrentUser();
 
+        // Show success message and navigate back to profile screen
         Alert.alert(
           'Success',
           'Profile updated successfully',
-          [{
-            text: 'OK',
-            onPress: () => {
-              // Set a parameter to tell the ProfileScreen we're returning from edit
-              navigation.navigate({
-                name: 'Profile',
-                params: { editComplete: true, timestamp: Date.now() },
-                merge: true,
-              });
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate back to the MyProfile screen within the ProfileStack
+                navigation.navigate('MyProfile', {
+                  refresh: true,
+                  timestamp: Date.now()
+                });
+              }
             }
-          }]
+          ]
         );
       }
     } catch (error: any) {
