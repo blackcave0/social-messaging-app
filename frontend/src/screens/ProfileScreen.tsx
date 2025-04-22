@@ -28,6 +28,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../types/navigation';
 import { LinearGradient } from 'expo-linear-gradient';
 import { API_URL } from '../utils/config'; // Import API_URL from config instead of defining it locally
+import StoryCircle from '../components/StoryCircle';
 // import { useUserContext } from '../context/UserContext';
 interface ExtendedUser {
   _id: string;
@@ -1009,10 +1010,15 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
             <View style={styles.profileSection}>
               {/* Profile Image and Stats Row */}
               <View style={styles.profileTopRow}>
-                <Image
-                  source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
-                  style={styles.profileImage}
-                />
+                <View style={styles.profileImageContainer}>
+                  <StoryCircle
+                    userId={user?._id || ''}
+                    profileImage={user?.profilePicture || DEFAULT_AVATAR}
+                    size="large"
+                    showAddButton={true}
+                    onAddPress={() => navigation.navigate('CreateStory')}
+                  />
+                </View>
 
                 <View style={styles.statsContainer}>
                   <TouchableOpacity style={styles.statItem}>
@@ -1310,11 +1316,38 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  profileImage: {
+  profileImageContainer: {
+    // position: 'relative',
     width: 86,
     height: 86,
     borderRadius: 43,
     borderWidth: 0,
+    // backgroundColor: '#F5F5F5', // Light gray fallback
+  },
+  storyAddButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    // marginLeft : 10,x`
+    // backgroundColor: '#000000',
+    padding: 2,
+    // borderColor: "#393E46",
+    // borderWidth : 2,
+    borderRadius: 100
+  },
+  storyAddButtonIcon: {
+    color: "#F85959",
+    backgroundColor: '#20262E',
+    borderRadius: 100,
+    // padding : 5
+  },
+  profileImage: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderColor: "#FF204E",
+
+    borderWidth: 2,
     backgroundColor: '#F5F5F5', // Light gray fallback
   },
   statsContainer: {
