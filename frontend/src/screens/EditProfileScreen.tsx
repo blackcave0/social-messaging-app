@@ -49,12 +49,12 @@ export default function EditProfileScreen({ navigation, route }: EditProfileScre
         quality: 0.5,
       });
 
-      const cameraResult = await ImagePicker.launchCameraAsync({
+      /* const cameraResult = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images', 'videos'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
-      });
+      }); */
 
       if (!pickerResult.canceled) {
         setProfilePicture(pickerResult.assets[0].uri);
