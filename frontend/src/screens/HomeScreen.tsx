@@ -17,6 +17,7 @@ import { useAuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { API_URL, DEFAULT_AVATAR } from '../utils/config';
 import SafeAreaLayout from '../components/SafeAreaLayout';
+import StoryCircle from '../components/StoryCircle';
 
 interface Post {
   _id: string;
@@ -33,6 +34,13 @@ interface Post {
   createdAt: string;
 }
 
+interface StoryUser {
+  _id: string;
+  username: string;
+  profilePicture?: string;
+  hasStories: boolean;
+}
+
 interface HomeScreenProps {
   navigation: any;
 }
@@ -40,11 +48,14 @@ interface HomeScreenProps {
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuthContext();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [storyUsers, setStoryUsers] = useState<StoryUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingStories, setLoadingStories] = useState(true);
 
   useEffect(() => {
     fetchPosts();
+    fetchStoryUsers();
   }, []);
 
   // Generate mock posts for testing
@@ -144,9 +155,76 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   };
 
+  const fetchStoryUsers = async () => {
+    if (!user?.token) return;
+
+    try {
+      setLoadingStories(true);
+
+      // Check if current user has stories
+      let currentUserHasStories = false;
+      try {
+        const userStoriesResponse = await axios.get(
+          `${API_URL}/api/stories/user/${user._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+            }
+          }
+        );
+
+        if (userStoriesResponse.data && userStoriesResponse.data.success) {
+          currentUserHasStories = userStoriesResponse.data.data.length > 0;
+        }
+      } catch (error) {
+        console.error('Error fetching current user stories:', error);
+      }
+
+      // First add the current user
+      const currentUserStory: StoryUser = {
+        _id: user._id,
+        username: user.username,
+        profilePicture: user.profilePicture,
+        hasStories: currentUserHasStories
+      };
+
+      // Get stories from users the current user follows
+      const response = await axios.get(
+        `${API_URL}/api/stories/feed`,
+        {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          }
+        }
+      );
+
+      let usersWithStories: StoryUser[] = [currentUserStory];
+
+      if (response.data && response.data.success) {
+        // Map the data to our StoryUser type
+        const followingWithStories = response.data.data.map((userData: any) => ({
+          _id: userData._id,
+          username: userData.username,
+          profilePicture: userData.profilePicture,
+          hasStories: true
+        }));
+
+        // Add following users with stories to our array
+        usersWithStories = [...usersWithStories, ...followingWithStories];
+      }
+
+      setStoryUsers(usersWithStories);
+    } catch (error) {
+      console.error('Error fetching story users:', error);
+    } finally {
+      setLoadingStories(false);
+    }
+  };
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchPosts();
+    fetchStoryUsers();
   };
 
   const handleCreatePost = () => {
@@ -191,18 +269,47 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   };
 
-  const renderStoryItem = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.storyContainer}>
-      <View style={styles.storyRing}>
-        <Image
-          source={{ uri: item.profilePicture }}
-          style={styles.storyAvatar}
-        />
-      </View>
+  const renderStoryItem = ({ item }: { item: StoryUser }) => (
+    <View style={styles.storyItemContainer}>
+      {item._id === user?._id ? (
+        item.hasStories ? (
+          // User has stories - show their own stories
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Stories', { userId: item._id })}
+          >
+            <StoryCircle
+              userId={item._id}
+              profileImage={item.profilePicture}
+              size="small"
+              showAddButton={false}
+            />
+          </TouchableOpacity>
+        ) : (
+          // User doesn't have stories - allow creating a new one
+          <StoryCircle
+            userId={item._id}
+            profileImage={item.profilePicture}
+            size="small"
+            showAddButton={true}
+            onAddPress={() => navigation.navigate('CreateStory')}
+          />
+        )
+      ) : (
+        // Other users' stories
+        <TouchableOpacity
+          onPress={() => item.hasStories && navigation.navigate('Stories', { userId: item._id })}
+        >
+          <StoryCircle
+            userId={item._id}
+            profileImage={item.profilePicture}
+            size="small"
+          />
+        </TouchableOpacity>
+      )}
       <Text style={styles.storyUsername} numberOfLines={1}>
-        {item.username.length > 9 ? item.username.substring(0, 9) + '...' : item.username}
+        {item._id === user?._id ? 'Your Story' : item.username}
       </Text>
-    </TouchableOpacity>
+    </View>
   );
 
   const renderPost = ({ item }: { item: Post }) => {
@@ -293,15 +400,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     );
   };
 
-  const mockStories = [
-    { id: 1, username: 'Your Story', profilePicture: user?.profilePicture || DEFAULT_AVATAR, isCurrentUser: true },
-    ...getMockPosts().map(post => ({
-      id: post.user._id,
-      username: post.user.username,
-      profilePicture: post.user.profilePicture || DEFAULT_AVATAR
-    }))
-  ];
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -311,44 +409,59 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }
 
   return (
-    <SafeAreaLayout>
+    <SafeAreaLayout style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logoText}>Social App</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Ionicons name="add-circle-outline" size={26} color="#000" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('ChatList')}>
-            <Ionicons name="paper-plane-outline" size={26} color="#000" />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.headerTitle}>Social App</Text>
+        <TouchableOpacity
+          style={styles.headerIconButton}
+          onPress={handleCreatePost}
+        >
+          <Ionicons name="add-circle-outline" size={28} color="black" />
+        </TouchableOpacity>
       </View>
 
       <FlatList
         data={posts}
-        keyExtractor={(item) => item._id}
         renderItem={renderPost}
+        keyExtractor={item => item._id}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#405DE6"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
         ListHeaderComponent={
-          <View style={styles.storiesContainer}>
-            <FlatList
-              data={mockStories}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={renderStoryItem}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.storiesList}
-            />
-          </View>
+          <>
+            {/* Stories Section */}
+            <View style={styles.storiesContainer}>
+              {loadingStories ? (
+                <ActivityIndicator size="small" color="#0095F6" style={styles.storiesLoader} />
+              ) : (
+                <FlatList
+                  data={storyUsers}
+                  renderItem={renderStoryItem}
+                  keyExtractor={item => item._id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.storiesList}
+                />
+              )}
+            </View>
+            <View style={styles.divider} />
+          </>
         }
-        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="images-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>No posts yet</Text>
+            </View>
+          ) : null
+        }
       />
+
+      {loading && !refreshing && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0095F6" />
+        </View>
+      )}
     </SafeAreaLayout>
   );
 }
@@ -375,14 +488,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: '#DBDBDB',
   },
-  logoText: {
+  headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
   },
-  headerIcons: {
-    flexDirection: 'row',
-  },
-  headerIcon: {
+  headerIconButton: {
     marginLeft: 20,
   },
   storiesContainer: {
@@ -393,26 +503,10 @@ const styles = StyleSheet.create({
   storiesList: {
     paddingLeft: 10,
   },
-  storyContainer: {
+  storyItemContainer: {
     alignItems: 'center',
     marginRight: 15,
     width: 70,
-  },
-  storyRing: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: '#E1306C',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  storyAvatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    borderWidth: 2,
-    borderColor: '#fff',
   },
   storyUsername: {
     marginTop: 5,
@@ -486,5 +580,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E8E',
     marginTop: 2,
+  },
+  storiesLoader: {
+    marginVertical: 10,
+  },
+  divider: {
+    height: 0.5,
+    backgroundColor: '#DBDBDB',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#8E8E8E',
+    marginTop: 10,
   },
 }); 
