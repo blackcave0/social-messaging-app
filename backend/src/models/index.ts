@@ -8,6 +8,7 @@ import Story from './Story';
 import Message from './Message';
 import Conversation from './Conversation';
 import Notification from './Notification';
+import Following from './Following';
 
 export {
   User,
@@ -16,5 +17,6 @@ export {
   Story,
   Message,
   Conversation,
-  Notification
+  Notification,
+  Following
 }; 
