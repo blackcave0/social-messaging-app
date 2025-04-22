@@ -92,12 +92,34 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
       quality: 1,
     });
 
-    console.log('Image picker result:', result);
+    // console.log('Image picker result:', result);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   }
+
+  const handleOpenCamera = async () => {
+    // No permissions request is necessary for launching the image library
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  }
+
+  /* const cameraResult = await ImagePicker.launchCameraAsync({
+    mediaTypes: ['images', 'videos'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.5,
+  }); */
+
 
   // Default user data if not available from context
   const defaultUserData = {
@@ -123,12 +145,12 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsUploading(true);
 
       // Log user state for debugging
-      console.log('Current user state:', {
+      /* console.log('Current user state:', {
         userId: user?.id,
         name: user?.name,
         isLoading,
         authStatus
-      });
+      }); */
 
       if (!authStatus.authenticated) {
         Alert.alert('Authentication Error', 'You must be logged in to create a post.');
@@ -182,7 +204,39 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
       // Try using the test upload function first for better debugging
       if (image) {
         console.log('Using test upload function with image');
-        response = await testImageUpload(image, postText);
+        try {
+          response = await testImageUpload(image, postText);
+
+          // Check if the response indicates success
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to upload image');
+          }
+        } catch (uploadError: any) {
+          console.error('Image upload failed:', uploadError);
+          Alert.alert(
+            'Upload Failed',
+            uploadError.message || 'Failed to upload image. Would you like to post without an image?',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => setIsUploading(false)
+              },
+              {
+                text: 'Post without image',
+                onPress: async () => {
+                  // Try posting without the image
+                  response = await createPost({
+                    description: postText,
+                    mood: mood || undefined,
+                    images: []
+                  });
+                }
+              }
+            ]
+          );
+          return;
+        }
       } else {
         // Use regular createPost function
         response = await createPost(postData);
@@ -348,11 +402,11 @@ const CreatePostScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.mediaButtonText}>Photo</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.mediaButton} disabled={isUploading}>
+          <TouchableOpacity style={styles.mediaButton} disabled={isUploading} onPress={handleOpenCamera}>
             <View style={[styles.iconCircle, { backgroundColor: '#E91E63' }]}>
-              <Ionicons name="videocam" size={22} color="#fff" />
+              <Ionicons name="camera" size={22} color="#fff" />
             </View>
-            <Text style={styles.mediaButtonText}>Video</Text>
+            <Text style={styles.mediaButtonText}>Camera</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.mediaButton} disabled={isUploading}>

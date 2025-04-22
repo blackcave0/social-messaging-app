@@ -1,13 +1,13 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../utils/config';
 
-// Change this to your computer's actual IP address on your local network
-// For example: 'http://192.168.1.100:5000/api'
-const API_URL = 'http://192.168.30.181:5000/api'; // For physical devices
+// Use the centralized API URL from config
+const API_ENDPOINT = `${API_URL}/api`;
 
 // Create a new Axios instance
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_ENDPOINT,
   headers: {
     'Content-Type': 'multipart/form-data',
   },

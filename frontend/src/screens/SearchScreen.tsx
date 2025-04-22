@@ -90,8 +90,8 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
 
     setIsLoading(true);
     try {
-      console.log(`Searching for users matching: "${query}"`);
-      console.log(`Using API URL: ${API_URL}/api/users/search?query=${query}`);
+      // console.log(`Searching for users matching: "${query}"`);
+      // console.log(`Using API URL: ${API_URL}/api/users/search?query=${query}`);
 
       const response = await axios.get(`${API_URL}/api/users/search?query=${query}`, {
         headers: {
@@ -99,7 +99,7 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
         },
       });
 
-      console.log(`Search results count: ${response.data.length}`);
+      // console.log(`Search results count: ${response.data.length}`);
 
       // Get friend requests to check status
       let friendRequests: string[] = [];
@@ -111,7 +111,7 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
         });
         friendRequests = requestsResponse.data.map((req: any) => req._id);
       } catch (err) {
-        console.log('Could not fetch friend requests, continuing without this data');
+        // console.log('Could not fetch friend requests, continuing without this data');
       }
 
       // Get sent friend requests (check endpoint implementation)
@@ -126,12 +126,12 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
         });
         sentFriendRequests = sentRequestsResponse.data || [];
       } catch (err) {
-        console.log('Could not fetch sent requests, continuing without this data');
+        // console.log('Could not fetch sent requests, continuing without this data');
 
         // Fallback approach if the API doesn't support getting sent requests
         // Get all users and look for those with our ID in their friendRequests array
         try {
-          console.log('Trying alternative approach to fetch sent requests');
+          // console.log('Trying alternative approach to fetch sent requests');
           // This is not ideal for production as it fetches all users
           // but it's a workaround for testing/demo purposes
           const allUsersResponse = await axios.get(`${API_URL}/api/users`, {
@@ -150,7 +150,7 @@ const SearchScreen = ({ navigation }: RootTabScreenProps<'Search'>) => {
             )
             .map((u: any) => u._id);
         } catch (fetchErr) {
-          console.log('Alternative approach also failed:', fetchErr);
+          // console.log('Alternative approach also failed:', fetchErr);
         }
       }
 

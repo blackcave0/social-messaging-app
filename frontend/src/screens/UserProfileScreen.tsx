@@ -77,6 +77,7 @@ type PossibleNavigation = {
   goBack: () => void;
   push: (screen: string, params?: any) => void;
   popToTop: () => void;
+  getState?: () => any;
 };
 
 const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
@@ -109,6 +110,12 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   const nav = navigation as unknown as PossibleNavigation;
 
   useEffect(() => {
+    if (!userId) {
+      setError('User ID is missing. Cannot load profile.');
+      setLoading(false);
+      return;
+    }
+
     fetchUserProfile();
     fetchUserPosts();
     fetchRelationshipStatus();
@@ -130,7 +137,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     if (fromFollowRequest && relationship.hasReceivedRequest) {
       // We could add scroll to view logic here if needed
-      console.log('Coming from follow request notification');
+      // console.log('Coming from follow request notification');
     }
   }, [fromFollowRequest, relationship.hasReceivedRequest]);
 
@@ -142,7 +149,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     try {
-      console.log(`Fetching relationship status with user ID: ${userId}`);
+      // console.log(`Fetching relationship status with user ID: ${userId}`);
       const response = await axios.get(`${API_URL}/api/users/${userId}/relationship`, {
         headers: {
           Authorization: `Bearer ${currentUser.token}`,
@@ -151,7 +158,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (response.data.success) {
         setRelationship(response.data.relationship);
-        console.log('Relationship data:', response.data.relationship);
+        // console.log('Relationship data:', response.data.relationship);
       }
     } catch (error: any) {
       console.error('Error fetching relationship status:', error);
@@ -166,7 +173,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     try {
-      console.log(`Fetching user profile for ID: ${userId}`);
+      // console.log(`Fetching user profile for ID: ${userId}`);
       const response = await axios.get(`${API_URL}/api/users/${userId}`, {
         headers: {
           Authorization: `Bearer ${currentUser.token}`,
@@ -203,7 +210,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (response.data.success) {
         setFollowers(response.data.followers);
-        console.log('Followers loaded:', response.data.followers.length);
+        // console.log('Followers loaded:', response.data.followers.length);
       }
     } catch (error: any) {
       console.error('Error fetching followers:', error);
@@ -212,7 +219,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         Alert.alert('Error', 'Failed to load followers');
       } else {
         // If 404, just set empty followers array
-        console.log('No followers found or endpoint not available');
+        // console.log('No followers found or endpoint not available');
         setFollowers([]);
       }
     }
@@ -233,7 +240,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (response.data.success) {
         setFollowing(response.data.following);
-        console.log('Following loaded:', response.data.following.length);
+        // console.log('Following loaded:', response.data.following.length);
       }
     } catch (error: any) {
       console.error('Error fetching following:', error);
@@ -242,7 +249,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         Alert.alert('Error', 'Failed to load following');
       } else {
         // If 404, just set empty following array
-        console.log('No following found or endpoint not available');
+        // console.log('No following found or endpoint not available');
         setFollowing([]);
       }
     }
@@ -265,11 +272,13 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     try {
-      console.log(`Fetching posts for user: ${userId}`);
+      // console.log(`Fetching posts for user: ${userId}`);
+      // Add timeout and retry logic
       const response = await axios.get(`${API_URL}/api/posts`, {
         headers: {
           Authorization: `Bearer ${currentUser.token}`,
         },
+        timeout: 10000 // 10 second timeout
       });
 
       if (response.data && response.data.success) {
@@ -278,21 +287,55 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
           (post: Post) => post.user && post.user._id === userId
         );
         setPosts(userPosts);
-        console.log(`Found ${userPosts.length} posts for user ${userId}`);
+        // console.log(`Found ${userPosts.length} posts for user ${userId}`);
       }
     } catch (error: any) {
       console.error('Error fetching user posts:', error);
 
+      if (error.code === 'ECONNABORTED') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else if (!error.response) {
+        setError('Network error. Make sure the backend server is running and accessible.');
+      } else {
+        setError(error.response?.data?.message || 'Failed to load posts');
+      }
+
+      // Log more detailed information for debugging
       if (error.response) {
         console.error('Error response data:', error.response.data);
+        console.error('Error response status:', error.response.status);
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+      } else {
+        console.error('Error setting up request:', error.message);
       }
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    Promise.all([fetchUserProfile(), fetchUserPosts()])
-      .finally(() => setRefreshing(false));
+    setError(null); // Clear any previous errors
+
+    try {
+      // Run both fetch operations in parallel and catch errors
+      await Promise.all([
+        fetchUserProfile().catch(err => {
+          console.error('Error refreshing profile:', err);
+          setError('Error refreshing profile data. Pull down to try again.');
+        }),
+        fetchUserPosts().catch(err => {
+          console.error('Error refreshing posts:', err);
+          // Don't set error here, as fetchUserPosts already sets it if needed
+        })
+      ]);
+
+      // console.log('Profile and posts refreshed successfully');
+    } catch (error) {
+      console.error('Error during refresh:', error);
+      setError('Failed to refresh data. Pull down to try again.');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleFollowUser = async () => {
@@ -445,7 +488,7 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleSendMessage = () => {
     // Navigate to the Chat screen
-    (navigation as any).navigate('Chat', {
+    (navigation as any).navigate('ChatDetail', {
       chatId: userId,
       userId: userId,
       name: user?.name || user?.username || 'User'
@@ -524,64 +567,81 @@ const UserProfileScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const renderPostItem = ({ item }: { item: PostDisplay }) => (
-    <TouchableOpacity
-      style={styles.postItem}
-      onPress={() => {
-        // Find the best way to navigate to PostDetails based on the current navigation state
-        if (nav.navigate) {
-          try {
-            // When in the root stack, navigate to PostDetails directly
-            if (route.name === 'UserProfile') {
-              console.log('Navigating from root UserProfile to PostDetails in HomeStack');
-              nav.navigate('Main', {
-                screen: 'Home',
-                params: {
+  const renderPostItem = ({ item }: { item: PostDisplay }) => {
+    // Make sure we have a valid username before navigating
+    const displayUsername = user?.username || '';
+
+    return (
+      <TouchableOpacity
+        style={styles.postItem}
+        onPress={() => {
+          // Find the best way to navigate to PostDetails based on the current navigation state
+          if (nav.navigate) {
+            try {
+              // Check if we're in the Profile tab navigation stack
+              const navState = nav.getState?.() || {};
+              const isInProfileTab = navState.routes?.some?.(
+                (route: { name: string; state?: { routes?: Array<{ name: string }> } }) =>
+                  route.name === 'Profile' ||
+                  (route.state && route.state.routes?.some?.((r: { name: string }) => r.name === 'Profile'))
+              );
+
+              // If we're in the Profile tab, navigate within the Profile stack
+              if (isInProfileTab) {
+                // Navigate to PostDetails within the Profile stack
+                nav.navigate('PostDetails', {
+                  postId: item._id,
+                  userId,
+                  userName: displayUsername
+                });
+              }
+              // When in the root stack, navigate to PostDetails directly
+              else if (route.name === 'UserProfile') {
+                // Use the Profile tab instead of Home tab for consistent navigation
+                nav.navigate('Profile', {
                   screen: 'PostDetails',
                   params: {
                     postId: item._id,
                     userId,
-                    userName: user?.name || user?.username || 'User'
+                    userName: displayUsername
                   }
+                });
+              } else {
+                // When in a nested stack (like inside Home), navigate to PostDetails in that stack
+                nav.navigate('PostDetails', {
+                  postId: item._id,
+                  userId,
+                  userName: displayUsername
+                });
+              }
+            } catch (err) {
+              console.error('Navigation error:', err);
+
+              // Fallback navigation through the Profile tab if nested fails
+              nav.navigate('Profile', {
+                screen: 'PostDetails',
+                params: {
+                  postId: item._id,
+                  userId,
+                  userName: displayUsername
                 }
               });
-            } else {
-              // When in a nested stack (like inside Home), navigate to PostDetails in that stack
-              console.log('Navigating to PostDetails within the current stack');
-              nav.navigate('PostDetails', {
-                postId: item._id,
-                userId,
-                userName: user?.name || user?.username || 'User'
-              });
             }
-          } catch (err) {
-            console.error('Navigation error:', err);
-
-            // Fallback navigation through the root navigator if nested fails
-            console.log('Using fallback navigation to PostDetails');
-            nav.navigate('Home', {
-              screen: 'PostDetails',
-              params: {
-                postId: item._id,
-                userId,
-                userName: user?.name || user?.username || 'User'
-              }
-            });
           }
-        }
-      }}
-    >
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
-      ) : (
-        <View style={styles.textPostContainer}>
-          <Text style={styles.textPostContent} numberOfLines={5}>
-            {item.content}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        }}
+      >
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
+        ) : (
+          <View style={styles.textPostContainer}>
+            <Text style={styles.textPostContent} numberOfLines={5}>
+              {item.content}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderUserItem = ({ item }: { item: UserData }) => (
     <View style={styles.userItemContainer}>

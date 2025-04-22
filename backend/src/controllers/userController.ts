@@ -2,6 +2,10 @@ import { Request, Response } from 'express';
 import User from '../models/User';
 import mongoose, { Types } from 'mongoose';
 import { createNotification } from './notificationController';
+import cloudinary, { uploadToCloudinary } from '../config/cloudinary';
+import fs from 'fs';
+import path from 'path';
+import { CloudinaryUploadResult } from '../config/cloudinary';
 
 // @desc    Get user profile
 // @route   GET /api/users/:id
@@ -61,29 +65,29 @@ export const updateUserProfile = async (req: Request, res: Response) => {
 // @access  Private
 export const sendFriendRequest = async (req: Request, res: Response) => {
   try {
-    console.log(`Friend request from ${req.user._id} to ${req.params.id}`);
+    // console.log(`Friend request from ${req.user._id} to ${req.params.id}`);
     
     if (req.user._id.toString() === req.params.id) {
-      console.log('User attempted to send friend request to self');
+      // console.log('User attempted to send friend request to self');
       return res.status(400).json({ message: 'Cannot send friend request to yourself' });
     }
 
     const targetUser = await User.findById(req.params.id);
     if (!targetUser) {
-      console.log(`Target user ${req.params.id} not found`);
+      // console.log(`Target user ${req.params.id} not found`);
       return res.status(404).json({ message: 'User not found' });
     }
 
     // Check if already following
     const targetUserId = new mongoose.Types.ObjectId(req.params.id);
     if (req.user.following.some((id: mongoose.Types.ObjectId) => id.equals(targetUserId))) {
-      console.log(`User ${req.user._id} is already following ${targetUser._id}`);
+      // console.log(`User ${req.user._id} is already following ${targetUser._id}`);
       return res.status(400).json({ message: 'Already following this user' });
     }
 
     // Check if friend request already sent
     if (targetUser.friendRequests.some((id: mongoose.Types.ObjectId) => id.equals(req.user._id))) {
-      console.log(`Friend request already sent from ${req.user._id} to ${targetUser._id}`);
+      // console.log(`Friend request already sent from ${req.user._id} to ${targetUser._id}`);
       return res.status(400).json({ message: 'Friend request already sent' });
     }
 
@@ -98,14 +102,14 @@ export const sendFriendRequest = async (req: Request, res: Response) => {
       'friendRequest'
     );
     
-    console.log(`Friend request sent successfully from ${req.user._id} to ${targetUser._id}`);
+    // console.log(`Friend request sent successfully from ${req.user._id} to ${targetUser._id}`);
     if (notification) {
-      console.log(`Notification created: ${notification._id}`);
+      // console.log(`Notification created: ${notification._id}`);
     }
 
     res.json({ message: 'Friend request sent successfully' });
   } catch (error) {
-    console.error('Send friend request error:', error);
+    // console.error('Send friend request error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -225,23 +229,42 @@ export const uploadProfilePicture = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    // Generate URL for the uploaded file
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const profilePicture = `${baseUrl}/uploads/${req.file.filename}`;
-
-    // Update user's profile picture
-    user.profilePicture = profilePicture;
+    
+    let profilePictureUrl;
+    
+    try {
+      console.log('Attempting to upload to Cloudinary...');
+      // Upload directly from buffer to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: 'social-app/profile_pictures',
+        resource_type: 'auto',
+      }) as CloudinaryUploadResult;
+      
+      console.log('Cloudinary upload successful:', result.secure_url);
+      profilePictureUrl = result.secure_url;
+    } catch (cloudinaryError: any) {
+      console.error('Cloudinary upload failed:', cloudinaryError);
+      return res.status(500).json({ 
+        message: 'Failed to upload to Cloudinary', 
+        error: cloudinaryError.message || 'Unknown error'
+      });
+    }
+    
+    // Update user's profile picture with the Cloudinary URL
+    user.profilePicture = profilePictureUrl;
     await user.save();
-
+    
     res.json({ 
       success: true, 
-      profilePicture,
+      profilePicture: profilePictureUrl,
       message: 'Profile picture uploaded successfully' 
     });
-  } catch (error) {
-    console.error('Upload profile picture error:', error);
-    res.status(500).json({ message: 'Server error' });
+  } catch (error: any) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({ 
+      message: 'Failed to upload profile picture', 
+      error: error.message || 'Unknown error'
+    });
   }
 };
 
@@ -252,10 +275,10 @@ export const searchUsers = async (req: Request, res: Response) => {
   try {
     const { query } = req.query;
     
-    console.log(`Search request received. Query: "${query}", User ID: ${req.user._id}`);
+    // console.log(`Search request received. Query: "${query}", User ID: ${req.user._id}`);
     
     if (!query || typeof query !== 'string') {
-      console.log('Invalid search query', { query });
+      // console.log('Invalid search query', { query });
       return res.status(400).json({ message: 'Search query is required' });
     }
 
@@ -274,7 +297,7 @@ export const searchUsers = async (req: Request, res: Response) => {
     .select('_id username name profilePicture')
     .limit(20);
 
-    console.log(`Search results for "${query}": ${users.length} users found`);
+    // console.log(`Search results for "${query}": ${users.length} users found`);
     
     res.json(users);
   } catch (error) {
@@ -288,14 +311,14 @@ export const searchUsers = async (req: Request, res: Response) => {
 // @access  Private
 export const getSentFriendRequests = async (req: Request, res: Response) => {
   try {
-    console.log(`Getting sent friend requests for user: ${req.user._id}`);
+    // console.log(`Getting sent friend requests for user: ${req.user._id}`);
     
     // Find all users who have the current user's ID in their friendRequests array
     const usersWithPendingRequests = await User.find({
       friendRequests: { $in: [req.user._id] }
     }).select('_id username name profilePicture');
 
-    console.log(`Found ${usersWithPendingRequests.length} users with pending requests from current user`);
+    // console.log(`Found ${usersWithPendingRequests.length} users with pending requests from current user`);
     
     // Return just the user IDs as an array if that's what the frontend expects
     const userIds = usersWithPendingRequests.map(user => user._id);

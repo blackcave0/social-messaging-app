@@ -68,7 +68,7 @@ export const ChatTabBadgeWrapper = () => {
     }
   } catch (error) {
     // Silently fail if the context isn't available
-    console.log('ChatTabBadgeWrapper: ChatContext not available');
+    // console.log('ChatTabBadgeWrapper: ChatContext not available');
   }
 
   return null;
