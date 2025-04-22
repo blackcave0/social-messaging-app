@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
-import { RootStackParamList, RootTabParamList } from '../types/navigation';
+import { RootStackParamList, RootTabParamList, ProfileStackParamList, RootTabScreenProps, ProfileStackScreenProps } from '../types/navigation';
 import { ChatProvider } from '../context/ChatContext';
 import { ChatStackNavigator, ChatTabBadgeWrapper } from './ChatNavigator';
+import { TouchableOpacity, View, Text, Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NavigatorScreenParams } from '@react-navigation/native';
 
 // Auth screens
 import LoginScreen from '../screens/LoginScreen';
@@ -25,6 +31,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PostDetailsScreen from '../screens/PostDetailsScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ChatListScreen from '../screens/ChatListScreen';
+import { User } from '../types/User';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -60,10 +68,10 @@ const CreateStack = () => (
 // Profile stack navigator
 const ProfileStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="MyProfile" component={ProfileScreen as React.ComponentType<any>}  />
+    <Stack.Screen name="MyProfile" component={ProfileScreen as React.ComponentType<any>} />
     <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
-    <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
+    <Stack.Screen name="PostDetails" component={PostDetailsScreen} options={{ headerTitle: 'All Posts' }} />
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="CreatePost" component={CreatePostScreen} />
   </Stack.Navigator>
@@ -71,6 +79,40 @@ const ProfileStack = () => (
 
 // Main tab navigator
 const MainNavigator = () => {
+  const { user } = useAuthContext();
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    if (user?.profilePicture) {
+      setProfilePicture(user.profilePicture);
+    }
+    if (user?.token) {
+      setIsLoggedIn(true);
+    }
+  }, [user]);
+
+  const handleProfilePress = () => {
+    return (
+      <TouchableOpacity >
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 24, height: 24, borderRadius: 12, overflow: 'hidden' }}>
+            <Image
+              source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
+              style={{ width: 24, height: 24 }}
+            />
+          </View>
+          <Text style={{ fontSize: 10, color: '#888888', marginTop: 2 }}>
+            {user?.username || 'Profile'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      )
+  };
+
+  const DEFAULT_AVATAR = 'https://i.imgur.com/6VBx3io.png';
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -86,7 +128,9 @@ const MainNavigator = () => {
           } else if (route.name === 'Notifications') {
             iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
+            // Return null for Profile tab as we're using a custom tabBarButton
+            return null;
+            // iconName = focused ? 'person' : 'person-outline';
           }
 
           return <Ionicons name={iconName as any} size={24} color={color} />;
@@ -120,7 +164,29 @@ const MainNavigator = () => {
         name="Notifications"
         component={NotificationsScreen}
       />
-      <Tab.Screen name="Profile" component={ProfileStack} />
+      <Tab.Screen name="Profile" component={ProfileStack}
+        options={{
+          tabBarIcon: ({ focused, color }) => (
+            (isLoggedIn) ? <FontAwesome >
+              {/* <TouchableOpacity > */}
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 24, height: 24, borderRadius: 12, overflow: 'hidden' }}>
+                  <Image
+                    source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
+                    style={{ width: 24, height: 24 }}
+                  />
+                </View>
+                
+              </View>
+              {/* </TouchableOpacity> */}
+            </FontAwesome> : <FontAwesome name="user-o" size={30} color={color} />
+          )
+          // tabBarIcon: ({ focused, color }) => (
+          //   <Ionicons name={focused ? "person" : "person-outline"} size={30} color={color} />
+          // )
+        }}
+      />
+
     </Tab.Navigator>
   );
 };
@@ -176,6 +242,7 @@ export default function AppNavigator() {
           </ChatProvider>
         )}
       </Stack.Screen>
+
     </Stack.Navigator>
   ) : (
     <AuthNavigator />
