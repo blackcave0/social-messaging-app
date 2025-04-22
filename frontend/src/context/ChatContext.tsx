@@ -616,7 +616,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .sort((a, b) => {
             const dateAStr = a.created_at || a.createdAt || new Date().toISOString();
             const dateBStr = b.created_at || b.createdAt || new Date().toISOString();
-            return new Date(dateAStr).getTime() - new Date(dateBStr).getTime();
+            // Change to descending order (newest to oldest)
+            return new Date(dateBStr).getTime() - new Date(dateAStr).getTime();
           })
         : [];
 
