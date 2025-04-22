@@ -18,7 +18,7 @@ import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import postRoutes from './routes/postRoutes';
 import notificationRoutes from './routes/notificationRoutes';
-// import storyRoutes from './routes/storyRoutes';
+import storyRoutes from './routes/storyRoutes';
 import chatRoutes from './routes/chatRoutes';
 
 // Load environment variables
@@ -69,7 +69,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/notifications', notificationRoutes);
-// app.use('/api/stories', storyRoutes);
+app.use('/api/stories', storyRoutes);
 app.use('/api/chat', chatRoutes);
 
 // Default route
@@ -89,23 +89,23 @@ const deliveryReceiptsCache = new Map<string, Set<string>>();
 // Socket.IO connection
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
-  
+
   // Track user ID to socket ID mapping
   let currentUserId: string | null = null;
-  
+
   // Associate user with socket
   socket.on('authenticate', (userId: string) => {
     if (userId) {
       currentUserId = userId;
-      
+
       // Add this socket to the user's set of active sockets
       if (!userSocketMap.has(userId)) {
         userSocketMap.set(userId, new Set<string>());
       }
       userSocketMap.get(userId)?.add(socket.id);
-      
+
       console.log(`User ${userId} authenticated with socket ${socket.id}`);
-      
+
       // Process any queued messages for this user
       deliverQueuedMessages(userId);
     }
@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
     if (messageQueue.has(userId)) {
       const queuedMessages = messageQueue.get(userId) || [];
       console.log(`Delivering ${queuedMessages.length} queued messages to user ${userId}`);
-      
+
       queuedMessages.forEach(message => {
         // Emit each queued message directly to this socket
         socket.emit('receive_message', {
@@ -125,7 +125,7 @@ io.on('connection', (socket) => {
           _delivery_timestamp: new Date().toISOString()
         });
       });
-      
+
       // Clear the queue after delivery
       messageQueue.delete(userId);
     }
@@ -134,17 +134,17 @@ io.on('connection', (socket) => {
   // Join a room (conversation)
   socket.on('join_conversation', (conversationId) => {
     if (!conversationId) return;
-    
+
     socket.join(conversationId);
     console.log(`User ${currentUserId} joined conversation: ${conversationId}`);
-    
+
     // Notify others that user joined
-    socket.to(conversationId).emit('user_joined', { 
+    socket.to(conversationId).emit('user_joined', {
       conversationId,
       userId: currentUserId,
       timestamp: new Date().toISOString()
     });
-    
+
     // Mark user as online in this conversation
     io.to(conversationId).emit('user_online', {
       conversationId,
@@ -156,22 +156,22 @@ io.on('connection', (socket) => {
   // Leave a room
   socket.on('leave_conversation', (conversationId) => {
     if (!conversationId) return;
-    
+
     socket.leave(conversationId);
     console.log(`User ${currentUserId} left conversation: ${conversationId}`);
-    
+
     // Notify others that user left
-    socket.to(conversationId).emit('user_left', { 
+    socket.to(conversationId).emit('user_left', {
       conversationId,
       userId: currentUserId,
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // Handle typing indicator
   socket.on('typing', (data) => {
     if (!data.conversationId) return;
-    
+
     // Broadcast to everyone in the conversation except the sender
     socket.to(data.conversationId).emit('typing', {
       conversationId: data.conversationId,
@@ -179,11 +179,11 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // Handle stop typing
   socket.on('stop_typing', (data) => {
     if (!data.conversationId) return;
-    
+
     socket.to(data.conversationId).emit('stop_typing', {
       conversationId: data.conversationId,
       userId: data.userId,
@@ -196,37 +196,37 @@ io.on('connection', (socket) => {
     const conversationId = message.conversation_id || message.conversation;
     const recipientId = message.recipientId || message.recipient_id;
     const senderId = message.sender_id;
-    
+
     if (!conversationId) {
       console.error('No conversation ID provided for message:', message);
       return;
     }
-    
+
     // Generate a unique ID for this message if not provided
     const messageId = message.id || message._id || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Check if we've already processed this message recently (deduplication)
     const messageKey = `${messageId}-${senderId}-${conversationId}`;
     if (!recentMessagesCache.has(conversationId)) {
       recentMessagesCache.set(conversationId, new Set<string>());
     }
-    
+
     if (recentMessagesCache.get(conversationId)?.has(messageKey)) {
       console.log(`Skipping duplicate message: ${messageKey}`);
       return;
     }
-    
+
     // Add to recent messages cache with TTL (5 minutes)
     recentMessagesCache.get(conversationId)?.add(messageKey);
     setTimeout(() => {
       recentMessagesCache.get(conversationId)?.delete(messageKey);
     }, 5 * 60 * 1000);
-    
+
     console.log(`Real-time message from ${senderId} to conversation ${conversationId}`);
-    
+
     // Map recipientId to recipient_id for compatibility with both formats
-    message.recipient_id = recipientId; 
-    
+    message.recipient_id = recipientId;
+
     // Track message metadata
     const messageWithMetadata = {
       ...message,
@@ -238,13 +238,13 @@ io.on('connection', (socket) => {
       _delivery_status: 'sent',
       _delivery_timestamp: new Date().toISOString()
     };
-    
+
     // First attempt: try to deliver directly to the recipient's active sockets
     let directDeliverySuccessful = false;
-    
+
     if (recipientId) {
       const recipientSockets = userSocketMap.get(recipientId);
-      
+
       if (recipientSockets && recipientSockets.size > 0) {
         // Recipient has active sockets, try direct delivery
         recipientSockets.forEach(socketId => {
@@ -258,29 +258,29 @@ io.on('connection', (socket) => {
           }
         });
       }
-      
+
       // If direct delivery wasn't possible, queue the message
       if (!directDeliverySuccessful) {
         console.log(`Recipient ${recipientId} not online, queueing message`);
-        
+
         if (!messageQueue.has(recipientId)) {
           messageQueue.set(recipientId, []);
         }
-        
+
         messageQueue.get(recipientId)?.push({
           ...messageWithMetadata,
           _delivery_type: 'queued'
         });
       }
     }
-    
+
     // Always broadcast to the conversation room as well
     // This ensures delivery to any users currently viewing the conversation
     socket.to(conversationId).emit('receive_message', {
       ...messageWithMetadata,
       _delivery_type: 'room'
     });
-    
+
     // Send delivery receipt back to sender
     socket.emit('message_delivered', {
       messageId: messageId,
@@ -290,32 +290,32 @@ io.on('connection', (socket) => {
       status: directDeliverySuccessful ? 'delivered' : 'sent'
     });
   });
-  
+
   // Handle explicit message delivery confirmations
   socket.on('confirm_delivery', (data) => {
     const { messageId, conversationId, senderId } = data;
-    
+
     if (!messageId || !conversationId || !senderId || !currentUserId) return;
-    
+
     // Deduplicate delivery confirmations
     const confirmKey = `${messageId}-${currentUserId}`;
     if (!deliveryReceiptsCache.has(conversationId)) {
       deliveryReceiptsCache.set(conversationId, new Set<string>());
     }
-    
+
     if (deliveryReceiptsCache.get(conversationId)?.has(confirmKey)) {
       return; // Already confirmed
     }
-    
+
     // Add to receipts cache with TTL (10 minutes)
     deliveryReceiptsCache.get(conversationId)?.add(confirmKey);
     setTimeout(() => {
       deliveryReceiptsCache.get(conversationId)?.delete(confirmKey);
     }, 10 * 60 * 1000);
-    
+
     // Try to deliver confirmation to the sender directly
     const senderSockets = userSocketMap.get(senderId);
-    
+
     if (senderSockets && senderSockets.size > 0) {
       senderSockets.forEach(socketId => {
         const senderSocket = io.sockets.sockets.get(socketId);
@@ -329,7 +329,7 @@ io.on('connection', (socket) => {
         }
       });
     }
-    
+
     // Also broadcast to the conversation
     socket.to(conversationId).emit('message_seen', {
       messageId,
@@ -338,13 +338,13 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // Mark messages as read
   socket.on('mark_read', async (data) => {
     const { conversationId, messageIds } = data;
-    
+
     if (!conversationId) return;
-    
+
     try {
       // Update in Supabase
       if (messageIds && messageIds.length > 0) {
@@ -353,7 +353,7 @@ io.on('connection', (socket) => {
           .from('messages')
           .update({ read: true })
           .in('id', messageIds);
-          
+
         // Send read receipts for each message
         messageIds.forEach((messageId: string) => {
           // Extract sender ID from local cache or message
@@ -375,7 +375,7 @@ io.on('connection', (socket) => {
           .eq('conversation_id', conversationId)
           .eq('read', false)
           .select('id, sender_id');
-        
+
         // Send read receipts for each message
         if (messages && messages.length > 0) {
           messages.forEach(message => {
@@ -399,7 +399,7 @@ io.on('connection', (socket) => {
           });
         }
       }
-      
+
       // Broadcast read receipts to conversation room
       socket.to(conversationId).emit('messages_read', {
         conversationId,
@@ -407,11 +407,11 @@ io.on('connection', (socket) => {
         userId: currentUserId,
         timestamp: new Date().toISOString()
       });
-      
+
       console.log(`Messages marked as read in conversation ${conversationId}`);
     } catch (error) {
       console.error('Error marking messages as read:', error);
-      
+
       // Notify client of the error
       socket.emit('error', {
         type: 'mark_read_error',
@@ -425,15 +425,15 @@ io.on('connection', (socket) => {
   // User disconnects
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}, User: ${currentUserId || 'Unknown'}`);
-    
+
     // Remove this socket from the user's set of active sockets
     if (currentUserId && userSocketMap.has(currentUserId)) {
       userSocketMap.get(currentUserId)?.delete(socket.id);
-      
+
       // If no more active sockets, remove the user from the map
       if (userSocketMap.get(currentUserId)?.size === 0) {
         userSocketMap.delete(currentUserId);
-        
+
         // Broadcast user offline status to relevant conversations
         // (in a production app, you'd track which conversations the user was in)
         io.emit('user_offline', {
@@ -442,26 +442,26 @@ io.on('connection', (socket) => {
         });
       }
     }
-    
+
     // Reset user ID
     currentUserId = null;
   });
-  
+
   // Handle reconnection attempts
   socket.on('reconnect_attempt', () => {
     console.log(`Socket ${socket.id} attempting to reconnect`);
   });
-  
+
   // Handle successful reconnection
   socket.on('reconnect', () => {
     console.log(`Socket ${socket.id} reconnected`);
-    
+
     // Re-authenticate if we have user ID
     if (currentUserId) {
       socket.emit('authenticate', currentUserId);
     }
   });
-  
+
   // Error handling
   socket.on('error', (error) => {
     console.error(`Socket ${socket.id} error:`, error);
@@ -477,7 +477,7 @@ const setupSupabaseRealtime = async () => {
       console.warn('⚠️ Cannot set up Supabase Realtime because tables do not exist.');
       return null;
     }
-    
+
     // Subscribe to the 'messages' table for real-time changes
     const channel = supabase
       .channel('db-messages-changes')
@@ -490,32 +490,32 @@ const setupSupabaseRealtime = async () => {
         },
         async (payload) => {
           console.log('New message from Supabase database:', payload.new);
-          
+
           // Get the conversation ID from the payload
           const messageData = payload.new;
           const conversationId = messageData.conversation_id;
           const messageId = messageData.id;
           const senderId = messageData.sender_id;
           const recipientId = messageData.recipient_id;
-          
+
           if (!conversationId) {
             console.error('No conversation ID in new message payload:', payload);
             return;
           }
-          
+
           // Check if we've already processed this message via socket
           const messageKey = `${messageId}-${senderId}-${conversationId}`;
-          if (recentMessagesCache.has(conversationId) && 
-              recentMessagesCache.get(conversationId)?.has(messageKey)) {
+          if (recentMessagesCache.has(conversationId) &&
+            recentMessagesCache.get(conversationId)?.has(messageKey)) {
             console.log(`Skipping already processed message: ${messageKey}`);
             return;
           }
-          
+
           try {
             // Get sender info to populate the message
             const sender = await User.findById(messageData.sender_id);
             const recipient = await User.findById(messageData.recipient_id);
-            
+
             // Enrich message with user data
             const enrichedMessage = {
               ...messageData,
@@ -534,13 +534,13 @@ const setupSupabaseRealtime = async () => {
               _from_database: true,
               _processed_timestamp: new Date().toISOString()
             };
-            
+
             // First attempt: try to deliver directly to the recipient's active sockets
             let directDeliverySuccessful = false;
-            
+
             if (recipientId) {
               const recipientSockets = userSocketMap.get(recipientId);
-              
+
               if (recipientSockets && recipientSockets.size > 0) {
                 // Recipient has active sockets, try direct delivery
                 recipientSockets.forEach(socketId => {
@@ -554,39 +554,39 @@ const setupSupabaseRealtime = async () => {
                   }
                 });
               }
-              
+
               // If direct delivery wasn't possible, queue the message
               if (!directDeliverySuccessful) {
                 console.log(`Recipient ${recipientId} not online, queueing message from DB`);
-                
+
                 if (!messageQueue.has(recipientId)) {
                   messageQueue.set(recipientId, []);
                 }
-                
+
                 messageQueue.get(recipientId)?.push({
                   ...enrichedMessage,
                   _delivery_type: 'queued_db'
                 });
               }
             }
-            
+
             // Emit the message to all clients in the conversation room
             io.to(conversationId).emit('receive_message', {
               ...enrichedMessage,
               _delivery_type: 'room_db'
             });
-            
+
             // Add to recent messages cache to prevent duplicate processing
             if (!recentMessagesCache.has(conversationId)) {
               recentMessagesCache.set(conversationId, new Set<string>());
             }
             recentMessagesCache.get(conversationId)?.add(messageKey);
-            
+
             // Add expiration for cache entry
             setTimeout(() => {
               recentMessagesCache.get(conversationId)?.delete(messageKey);
             }, 5 * 60 * 1000); // 5 minutes
-            
+
             console.log(`Database message emitted to conversation ${conversationId}`);
           } catch (error) {
             console.error('Error enriching message with user data:', error);
@@ -604,7 +604,7 @@ const setupSupabaseRealtime = async () => {
       });
 
     console.log('✅ Supabase Realtime channel set up for messages');
-    
+
     return channel;
   } catch (error) {
     console.error('Failed to set up Supabase Realtime:', error);
