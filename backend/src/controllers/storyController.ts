@@ -4,6 +4,7 @@ import User from '../models/User';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { validationResult } from 'express-validator';
 import mongoose from 'mongoose';
+import Following from '../models/Following';
 
 // @desc    Create a new story
 // @route   POST /api/stories
@@ -22,8 +23,8 @@ export const createStory = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(file.path, 'stories');
+    // Upload to Cloudinary with user-specific folder
+    const result = await uploadToCloudinary(file.path, 'stories', userId);
 
     // Create story
     const story = await Story.create({
@@ -82,7 +83,7 @@ export const getUserStories = async (req: Request, res: Response) => {
       user: userId,
       expiresAt: { $gt: new Date() },
     })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: 1 })
       .populate('user', '_id username name profilePicture');
 
     // Return empty array instead of 404 when no stories found
@@ -275,6 +276,77 @@ export const getStoryViewers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error getting story viewers:', error);
     return res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get stories from users that current user follows
+// @route   GET /api/stories/following
+// @access  Private
+export const getFollowingUserStories = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!._id;
+
+    // Get users that the current user follows
+    const following = await Following.find({ follower: userId })
+      .select('following')
+      .lean();
+
+    if (!following.length) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Extract the IDs of users being followed
+    const followingIds = following.map((f: { following: mongoose.Types.ObjectId }) => f.following);
+
+    // Find all active stories from followed users
+    const stories = await Story.find({
+      user: { $in: followingIds },
+      expiresAt: { $gt: new Date() }
+    })
+      .sort({ createdAt: 1 }) // Change to ascending order (oldest first)
+      .populate('user', '_id username name profilePicture');
+
+    // Group stories by user
+    const storiesByUser = stories.reduce((acc: any, story) => {
+      const userId = story.user._id.toString();
+      if (!acc[userId]) {
+        // Since the user field is populated, we can safely access its properties
+        const populatedUser = story.user as unknown as {
+          _id: mongoose.Types.ObjectId;
+          username: string;
+          name: string;
+          profilePicture?: string;
+        };
+
+        acc[userId] = {
+          _id: populatedUser._id,
+          username: populatedUser.username,
+          name: populatedUser.name,
+          profilePicture: populatedUser.profilePicture,
+          stories: []
+        };
+      }
+      acc[userId].stories.push(story);
+      return acc;
+    }, {});
+
+    // Convert to array
+    const result = Object.values(storiesByUser);
+
+    return res.status(200).json({
+      success: true,
+      data: result
+    });
+
+  } catch (error) {
+    console.error('Get following stories error:', error);
+    res.status(500).json({
       success: false,
       message: 'Server error'
     });
