@@ -17,6 +17,7 @@ export type RootStackParamList = {
   MyProfile: undefined;
   CreatePost: undefined;
   CreateStory: undefined;
+  Stories: { userId?: string; refresh?: boolean };
   EditProfile: undefined;
   Settings: undefined;
   Notifications: undefined;
@@ -42,6 +43,7 @@ export type ProfileStackParamList = {
   PostDetails: { postId: string; userId?: string; userName?: string };
   UserProfile: { userId: string; fromFollowRequest?: boolean; userName?: string };
   CreatePost: undefined;
+  CreateStory: undefined;
 };
 
 export type ChatStackParamList = {
