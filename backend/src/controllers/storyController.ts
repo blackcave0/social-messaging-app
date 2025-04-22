@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Story from '../models/Story';
 import User from '../models/User';
+import { uploadToCloudinary } from '../utils/cloudinary';
 import { validationResult } from 'express-validator';
 import mongoose from 'mongoose';
 
@@ -14,20 +15,33 @@ export const createStory = async (req: Request, res: Response) => {
   }
 
   try {
-    const { mediaUrl, mediaType } = req.body;
+    const { userId } = req.body;
+    const file = req.file;
 
-    const newStory = new Story({
-      user: req.user._id,
-      mediaUrl,
-      mediaType,
+    if (!file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    // Upload to Cloudinary
+    const result = await uploadToCloudinary(file.path, 'stories');
+
+    // Create story
+    const story = await Story.create({
+      user: userId,
+      mediaUrl: result.secure_url,
+      mediaType: file.mimetype.startsWith('image') ? 'image' : 'video'
     });
 
-    const savedStory = await newStory.save();
-
-    res.status(201).json(savedStory);
+    res.status(201).json({
+      success: true,
+      data: story
+    });
   } catch (error) {
-    console.error('Create story error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error creating story:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating story'
+    });
   }
 };
 
@@ -36,36 +50,23 @@ export const createStory = async (req: Request, res: Response) => {
 // @access  Private
 export const getStories = async (req: Request, res: Response) => {
   try {
-    // Get followed users
-    const followingUsers = req.user.following;
-    // Include user's own stories
-    followingUsers.push(req.user._id);
+    const { userId } = req.params;
 
-    // Find stories from followed users that haven't expired
     const stories = await Story.find({
-      user: { $in: followingUsers },
-      expiresAt: { $gt: new Date() },
-    })
-      .sort({ createdAt: -1 })
-      .populate('user', '_id username name profilePicture');
+      user: userId,
+      expiresAt: { $gt: new Date() }
+    }).populate('user', 'username profilePicture');
 
-    // Group stories by user
-    const userStories = stories.reduce((acc: any, story) => {
-      const userId = story.user._id.toString();
-      if (!acc[userId]) {
-        acc[userId] = {
-          user: story.user,
-          stories: [],
-        };
-      }
-      acc[userId].stories.push(story);
-      return acc;
-    }, {});
-
-    res.json(Object.values(userStories));
+    res.status(200).json({
+      success: true,
+      data: stories
+    });
   } catch (error) {
-    console.error('Get stories error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching stories:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching stories'
+    });
   }
 };
 
@@ -84,43 +85,60 @@ export const getUserStories = async (req: Request, res: Response) => {
       .sort({ createdAt: -1 })
       .populate('user', '_id username name profilePicture');
 
-    if (stories.length === 0) {
-      return res.status(404).json({ message: 'No stories found for this user' });
-    }
-
-    res.json(stories);
+    // Return empty array instead of 404 when no stories found
+    return res.status(200).json({
+      success: true,
+      data: stories
+    });
   } catch (error) {
     console.error('Get user stories error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 };
 
 // @desc    View a story (add current user to viewers)
-// @route   PUT /api/stories/:id/view
+// @route   POST /api/stories/:storyId/view
 // @access  Private
 export const viewStory = async (req: Request, res: Response) => {
   try {
-    const story = await Story.findById(req.params.id);
+    const { storyId } = req.params;
+    const userId = req.body.userId || req.user._id;
 
+    // Validate storyId format
+    if (!mongoose.Types.ObjectId.isValid(storyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid story ID'
+      });
+    }
+
+    const story = await Story.findById(storyId);
     if (!story) {
-      return res.status(404).json({ message: 'Story not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Story not found'
+      });
     }
 
-    // Check if story has expired
-    if (story.expiresAt < new Date()) {
-      return res.status(400).json({ message: 'Story has expired' });
-    }
-
-    // Check if user already viewed the story
-    if (!story.viewers.some((viewerId: mongoose.Types.ObjectId) => viewerId.equals(req.user._id))) {
-      story.viewers.push(req.user._id);
+    // Add viewer if not already viewed
+    if (!story.views.includes(userId)) {
+      story.views.push(userId);
       await story.save();
     }
 
-    res.json({ message: 'Story viewed successfully' });
+    res.status(200).json({
+      success: true,
+      data: story
+    });
   } catch (error) {
-    console.error('View story error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error viewing story:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error viewing story'
+    });
   }
 };
 
@@ -146,5 +164,119 @@ export const deleteStory = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Delete story error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get stories from users the current user follows
+// @route   GET /api/stories/feed
+// @access  Private
+export const getFeedStories = async (req: Request, res: Response) => {
+  try {
+    // Get current user
+    const userId = req.user._id;
+
+    // Get user with populated following field
+    const user = await req.user.populate('following');
+
+    if (!user || !user.following) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Get followed user IDs
+    const followedUserIds = user.following.map((followedUser: any) => followedUser._id);
+
+    // Find stories from followed users that haven't expired
+    const stories = await Story.find({
+      user: { $in: followedUserIds },
+      expiresAt: { $gt: new Date() }
+    })
+      .populate('user', '_id username name profilePicture')
+      .sort({ createdAt: -1 });
+
+    // Group stories by user
+    const userStoriesMap = stories.reduce((acc: any, story: any) => {
+      const userId = story.user._id.toString();
+
+      if (!acc[userId]) {
+        acc[userId] = {
+          _id: story.user._id,
+          username: story.user.username,
+          name: story.user.name,
+          profilePicture: story.user.profilePicture,
+          stories: []
+        };
+      }
+
+      acc[userId].stories.push(story);
+      return acc;
+    }, {});
+
+    // Convert map to array
+    const userStories = Object.values(userStoriesMap);
+
+    res.status(200).json({
+      success: true,
+      data: userStories
+    });
+  } catch (error) {
+    console.error('Error fetching feed stories:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching feed stories'
+    });
+  }
+};
+
+// @desc    Get viewers of a story
+// @route   GET /api/stories/:storyId/viewers
+// @access  Private
+export const getStoryViewers = async (req: Request, res: Response) => {
+  try {
+    const { storyId } = req.params;
+
+    // Validate storyId format
+    if (!mongoose.Types.ObjectId.isValid(storyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid story ID'
+      });
+    }
+
+    // Find the story
+    const story = await Story.findById(storyId);
+
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: 'Story not found'
+      });
+    }
+
+    // Check if the story belongs to the current user
+    if (story.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only view viewers of your own stories'
+      });
+    }
+
+    // Get the details of users who viewed the story
+    const viewers = await User.find({
+      _id: { $in: story.views }
+    }).select('_id username name profilePicture');
+
+    return res.status(200).json({
+      success: true,
+      viewers
+    });
+  } catch (error) {
+    console.error('Error getting story viewers:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 }; 
