@@ -13,8 +13,9 @@ import {
   Alert,
   useWindowDimensions, // Import the hook
   Modal,
+  StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { useAuthContext } from '../context/AuthContext';
 import { usePostsContext } from '../context/PostsContext';
 import { SafeAreaLayout } from '../components';
@@ -25,6 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../types/navigation';
+import { LinearGradient } from 'expo-linear-gradient';
 import { API_URL } from '../utils/config'; // Import API_URL from config instead of defining it locally
 // import { useUserContext } from '../context/UserContext';
 interface ExtendedUser {
@@ -62,6 +64,7 @@ interface PostDisplay {
   isBackendPost: boolean;
   content: string;
   imageUrl?: string;
+  isVideo?: boolean;
 }
 
 interface FollowerUser {
@@ -79,7 +82,7 @@ type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, 'MyProfi
 
 // --- Constants for Grid Layout ---
 const NUM_COLUMNS = 3;
-const ITEM_MARGIN = 1; // Margin around each item (adjust as needed)
+const ITEM_MARGIN = 2; // Instagram uses slightly larger gap between posts
 
 export default function ProfileScreen({ navigation, route }: ProfileScreenProps) {
   const { user, fetchCurrentUser } = useAuthContext() as { user: ExtendedUser | null, fetchCurrentUser: () => Promise<void> };
@@ -633,7 +636,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               style={[styles.actionButton, styles.requestedButton]}
               onPress={() => handleUnfollow(item._id)}
             >
-              <Text style={styles.actionButtonText}>Requested</Text>
+              <Text style={styles.requestedButtonText}>Requested</Text>
             </TouchableOpacity>
           );
         } else if (handleAction) {
@@ -642,22 +645,19 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               style={[styles.actionButton, styles.unfollowButton]}
               onPress={() => handleAction(item._id)}
             >
-              <Text style={styles.actionButtonText}>Unfollow</Text>
+              <Text style={styles.unfollowButtonText}>Unfollow</Text>
             </TouchableOpacity>
           );
         } else if (isFollowerAndFollowing) {
-          // This follower is also being followed by you - show Message button
           return (
             <TouchableOpacity
               style={[styles.actionButton, styles.messageBubbleButton]}
               onPress={() => handleMessage(item._id)}
             >
-              <Text style={styles.actionButtonText}>Message</Text>
+              <Text style={styles.messageBubbleButtonText}>Message</Text>
             </TouchableOpacity>
           );
         } else if (isFollowerNotFollowed) {
-          // Special case: This is a follower who you're not following back
-          // Check if follow is in progress for this user
           const isLoading = followingInProgress[item._id] === true;
 
           return (
@@ -667,7 +667,7 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.actionButtonText}>Follow Back</Text>
               )}
@@ -873,30 +873,24 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 
 
   // --- Updated renderPostItem ---
-  // Use useCallback to prevent unnecessary re-renders when itemSize changes
   const renderPostItem = useCallback(({ item }: { item: PostDisplay }) => (
     <TouchableOpacity
       style={[
-        styles.postItemBase, // Use a base style without dimensions
-        // Apply dynamic size and margin
+        styles.postItemBase,
         {
           width: itemSize,
-          height: itemSize, // Make items square
+          height: itemSize,
           margin: ITEM_MARGIN,
         }
       ]}
       onPress={() => {
         try {
-          // Using push instead of navigate ensures we put a new screen on the stack
-          // rather than potentially replacing one
-          // console.log('Pushing PostDetails screen to navigation stack');
           navigation.push('PostDetails', {
             postId: item._id,
-            userId: user?._id // Pass current user ID to filter posts
+            userId: user?._id
           });
         } catch (err) {
           console.error('Navigation error:', err);
-          // Fallback navigation if needed
           navigation.navigate('PostDetails', {
             postId: item._id,
             userId: user?._id
@@ -907,8 +901,8 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
       {item.imageUrl ? (
         <Image
           source={{ uri: item.imageUrl }}
-          style={styles.postImage} // Image fills the container
-          onError={(e) => {/* console.log(`Failed to load image ${item.imageUrl}:`, e.nativeEvent.error) */ }} // Optional: Add error logging for images
+          style={styles.postImage}
+          onError={(e) => {/* console.log(`Failed to load image ${item.imageUrl}:`, e.nativeEvent.error) */ }}
         />
       ) : (
         <View style={styles.textPostContainer}>
@@ -917,13 +911,46 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
           </Text>
         </View>
       )}
+      {/* Add video icon overlay if it's a video post - based on Instagram UI */}
+      {item.isVideo && (
+        <View style={styles.videoIndicator}>
+          <Ionicons name="play" size={20} color="white" />
+        </View>
+      )}
     </TouchableOpacity>
-    // Depend on itemSize so it updates when screen size changes
   ), [itemSize, navigation, user?._id]);
 
 
-  // Determine total posts count (keep as is)
+  // Determine total posts count
   const totalPosts = displayPosts.length;
+
+  // Create stories data for the profile highlights
+  const storyHighlights = [
+    { id: 'new', title: 'New' },
+    { id: 'shaap', title: 'sнaαρ & s↑єєк...' },
+    { id: 'maababa', title: 'maaBaba 🙏' },
+    { id: 'crown', title: '👑' },
+    { id: 'deeksha', title: 'de...' },
+  ];
+
+  // Render a story highlight item
+  const renderStoryItem = ({ item }: { item: { id: string, title: string } }) => (
+    <View style={styles.storyItem}>
+      {item.id === 'new' ? (
+        <TouchableOpacity style={styles.newStoryButton}>
+          <Ionicons name="add" size={30} color="black" />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.storyCircle}>
+          <Image
+            source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
+            style={styles.storyImage}
+          />
+        </View>
+      )}
+      <Text style={styles.storyTitle} numberOfLines={1}>{item.title}</Text>
+    </View>
+  );
 
   // Keep error handling useEffect (or remove if not desired)
   useEffect(() => {
@@ -937,101 +964,162 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
   }, [error]);
 
   return (
-    <SafeAreaLayout>
+    <SafeAreaLayout style={styles.container}>
+      <StatusBar backgroundColor="black" barStyle="light-content" />
+
+      {/* Instagram-style header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.lockIconContainer}>
+            <Feather name="lock" size={14} color="white" style={styles.lockIcon} />
+          </TouchableOpacity>
+          <Text style={styles.username}>{user?.username}</Text>
+          <TouchableOpacity>
+            <MaterialIcons name="keyboard-arrow-down" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.navigate('CreatePost')}>
+            <Feather name="plus-square" size={24} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconButton} onPress={handleSettings}>
+            <Feather name="menu" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <FlatList
-        
         data={displayPosts}
-        renderItem={renderPostItem} // Use the updated render function
+        renderItem={renderPostItem}
         keyExtractor={(item) => item._id}
-        numColumns={NUM_COLUMNS} // Use the constant
+        numColumns={NUM_COLUMNS}
         refreshControl={
           <RefreshControl
             refreshing={refreshing || loading}
             onRefresh={handleRefresh}
-            colors={['#4B0082']}
-            tintColor={'#4B0082'} // For iOS
+            colors={['#ffffff']}
+            tintColor={'#ffffff'}
+            progressBackgroundColor="#121212"
           />
         }
         ListHeaderComponent={
           <>
-            <View style={styles.header}>
-              <TouchableOpacity style={styles.settingsButton} onPress={handleSettings}>
-                <Ionicons name="settings-outline" size={24} color="#333" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.messageButton} onPress={handleMessages}>
-                <Ionicons name="chatbubbles-outline" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.profileContainer}>
-              <Image
-                source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
-                style={styles.profileImage}
-              />
-              <View style={styles.profileInfoContainer}>
+            {/* Profile Information Section */}
+            <View style={styles.profileSection}>
+              {/* Profile Image and Stats Row */}
+              <View style={styles.profileTopRow}>
+                <Image
+                  source={{ uri: user?.profilePicture || DEFAULT_AVATAR }}
+                  style={styles.profileImage}
+                />
+
                 <View style={styles.statsContainer}>
-                  <View style={styles.statItem}>
+                  <TouchableOpacity style={styles.statItem}>
                     <Text style={styles.statValue}>{totalPosts}</Text>
-                    <Text style={styles.statLabel}>Posts</Text>
-                  </View>
+                    <Text style={styles.statLabel}>posts</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.statItem}
                     onPress={handleShowFollowers}
                   >
                     <Text style={styles.statValue}>{followers.length}</Text>
-                    <Text style={styles.statLabel}>Followers</Text>
+                    <Text style={styles.statLabel}>followers</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.statItem}
                     onPress={handleShowFollowing}
                   >
                     <Text style={styles.statValue}>{following.length}</Text>
-                    <Text style={styles.statLabel}>Following</Text>
+                    <Text style={styles.statLabel}>following</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
-                  <Text style={styles.editButtonText}>Edit Profile</Text>
+              </View>
+
+              {/* User Info */}
+              <View style={styles.userInfoContainer}>
+                <Text style={styles.displayName}>{user?.name || "_•⁠ ⁠⁠Daksh Srivastava•⁠_"}</Text>
+                <Text style={styles.bioText}>{user?.bio || "No bio yet"}</Text>
+                {/* <Text style={styles.bioText}>#ResilientSpirit</Text> */}
+                {/* <TouchableOpacity>
+                  <Text style={styles.websiteLink}>imdaksh.vercel.app</Text>
+                </TouchableOpacity> */}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actionButtonsRow}>
+                <TouchableOpacity
+                  style={styles.editProfileButton}
+                  onPress={handleEditProfile}
+                >
+                  <Text style={styles.editProfileText}>Edit profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shareProfileButton}
+                  onPress={() => {/* Handle share profile */ }}
+                >
+                  <Text style={styles.shareProfileText}>Share profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.addFriendButton}>
+                  <Ionicons name="person-add-outline" size={18} color="#000000" />
+                  {/* <FontAwesome name="user-md" size={20} color="#000000" /> */}
+                </TouchableOpacity>
+              </View>
+
+              {/* Story Highlights */}
+              <FlatList
+                data={storyHighlights}
+                renderItem={renderStoryItem}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.storyHighlightsContainer}
+              />
+
+              {/* Content Tabs */}
+              <View style={styles.contentTabsContainer}>
+                <TouchableOpacity style={styles.tabActive}>
+                  <Ionicons name="grid-outline" size={24} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tab}>
+                  <Ionicons name="play-outline" size={24} color="gray" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tab}>
+                  <Ionicons name="person-outline" size={24} color="gray" />
                 </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.userInfoContainer}>
-              <Text style={styles.name}>{user?.name}</Text>
-              <Text style={styles.username}>@{user?.username}</Text>
-              <Text style={styles.bioText}>{user?.bio || 'No bio yet'}</Text>
-            </View>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Your Posts</Text>
-              {loading && displayPosts.length === 0 && ( // Show loading only if no posts displayed yet
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#4B0082" />
-                  <Text style={styles.loadingText}>Loading posts...</Text>
-                </View>
-              )}
-              {!loading && displayPosts.length === 0 && !error && ( // Show empty state correctly
-                <View style={styles.emptyState}>
-                  <Ionicons name="images-outline" size={48} color="#ccc" />
-                  <Text style={styles.emptyStateText}>No posts yet</Text>
-                  <TouchableOpacity
-                    style={styles.createPostButton}
-                    onPress={() => navigation.navigate('CreatePost')}
-                  >
-                    <Text style={styles.createPostButtonText}>Create Your First Post</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              {/* Optional: Inline error display */}
-              {error && !loading && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-            </View>
+
+            {/* Loading States */}
+            {loading && displayPosts.length === 0 && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="white" />
+              </View>
+            )}
+
+            {!loading && displayPosts.length === 0 && !error && (
+              <View style={styles.emptyState}>
+                <Ionicons name="images-outline" size={48} color="#555" />
+                <Text style={styles.emptyStateText}>No posts yet</Text>
+              </View>
+            )}
+
+            {error && !loading && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
           </>
         }
-        // Apply padding to the container that holds the grid items
         contentContainerStyle={styles.postsGridContainer}
-      // Optional: Add key to force re-render on width change if layout bugs occur
-      // key={windowWidth}
       />
+
+      {/* Bottom Tab Bar - Just for visual completeness */}
+
 
       {/* Followers Modal */}
       <Modal
@@ -1040,7 +1128,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         transparent={false}
         statusBarTranslucent={false}
         onRequestClose={() => {
-          // console.log('Modal closing via back button');
           setShowFollowersModal(false);
         }}
       >
@@ -1050,7 +1137,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               <TouchableOpacity
                 style={styles.modalBackButton}
                 onPress={() => {
-                  // console.log('Close button pressed');
                   setShowFollowersModal(false);
                 }}
               >
@@ -1110,7 +1196,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
         transparent={false}
         statusBarTranslucent={false}
         onRequestClose={() => {
-          // console.log('Modal closing via back button');
           setShowFollowingModal(false);
         }}
       >
@@ -1120,7 +1205,6 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
               <TouchableOpacity
                 style={styles.modalBackButton}
                 onPress={() => {
-                  // console.log('Close button pressed');
                   setShowFollowingModal(false);
                 }}
               >
@@ -1180,230 +1264,297 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
 // const postSize = (width - 30) / 3; // Old static calculation REMOVED
 
 const styles = StyleSheet.create({
-  // ... (Keep styles for container, header, profileContainer, profileImage, etc. AS IS) ...
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF', // White background
   },
   header: {
-    padding: 15,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-  },
-  profileContainer: {
-    flexDirection: 'row',
-    padding: 15,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-  },
-  profileImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    marginRight: 20,
-    borderWidth: 2,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  profileInfoContainer: {
-    flex: 1,
-  },
-  userInfoContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  username: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  bioText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#333',
-  },
-  statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
-    paddingHorizontal: 10,
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderBottomColor: '#E0E0E0', // Light gray border
+    borderBottomWidth: 0.5,
+    backgroundColor: '#FFFFFF',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconButton: {
+    marginLeft: 20,
+  },
+  lockIconContainer: {
+    marginRight: 5,
+  },
+  lockIcon: {
+    marginTop: 2,
+  },
+  username: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginRight: 5,
+  },
+  profileSection: {
+    paddingBottom: 10,
+  },
+  profileTopRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  profileImage: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 0,
+    backgroundColor: '#F5F5F5', // Light gray fallback
+  },
+  statsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginLeft: 20,
   },
   statItem: {
     alignItems: 'center',
-    flex: 1,
   },
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
+    color: '#000000',
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#666666', // Medium gray for secondary text
   },
-  editButton: {
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginTop: 5,
+  userInfoContainer: {
+    paddingHorizontal: 15,
+    marginBottom: 10,
   },
-  editButtonText: {
-    fontWeight: '600',
+  displayName: {
     fontSize: 14,
-    color: '#333',
-  },
-  section: {
-    paddingHorizontal: 15, // Keep horizontal padding for title
-    paddingTop: 15, // Add top padding for the section
-    paddingBottom: 5, // Reduce bottom padding before grid starts
-  },
-  sectionTitle: {
-    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10, // Keep space after title
+    color: '#000000',
+    marginBottom: 4,
   },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+  bioText: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 2,
   },
-  emptyStateIcon: {
-    fontSize: 60,
-    color: '#ccc',
+  websiteLink: {
+    fontSize: 14,
+    color: '#0095F6', // Instagram blue
+    marginTop: 2,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
     marginBottom: 15,
   },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  loadingContainer: {
+  editProfileButton: {
     flex: 1,
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginRight: 5,
+    alignItems: 'center',
+  },
+  editProfileText: {
+    color: '#000000',
+    fontWeight: '600',
+  },
+  shareProfileButton: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginLeft: 5,
+    alignItems: 'center',
+  },
+  shareProfileText: {
+    color: '#000000',
+    fontWeight: '600',
+  },
+  addFriendButton: {
+    backgroundColor: '#F5F5F5',
+    width: 40,
+    height: 33,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    marginLeft: 5,
   },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-    fontSize: 14,
+  storyHighlightsContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 15,
   },
-  settingsButton: {
-    padding: 5,
-    marginLeft: 10,
+  storyItem: {
+    alignItems: 'center',
+    marginRight: 15,
+    width: 75,
   },
-  messageButton: {
-    padding: 5,
-    marginLeft: 10,
+  storyCircle: {
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  // Style for the FlatList content container
+  newStoryButton: {
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storyImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  storyTitle: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 5,
+  },
+  contentTabsContainer: {
+    flexDirection: 'row',
+    borderTopWidth: 0.5,
+    borderTopColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  tabActive: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000000',
+  },
   postsGridContainer: {
-    paddingHorizontal: ITEM_MARGIN, // Add horizontal padding equal to half the inter-item space
-    paddingBottom: ITEM_MARGIN, // Add padding at the bottom
-    // alignItems: 'flex-start', // Usually default, but can ensure items align left
+    paddingHorizontal: ITEM_MARGIN,
+    paddingBottom: 70, // Extra space for the bottom tab bar
   },
-  // Base style for post item (WITHOUT dimensions/margin)
   postItemBase: {
-    backgroundColor: '#f0f0f0', // Background while loading image
-    borderRadius: 4, // Optional rounding
-    overflow: 'hidden', // Important to clip the image
-    justifyContent: 'center', // For text post fallback
-    alignItems: 'center',   // For text post fallback
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: '#E0E0E0',
   },
-  // Removed postItem style with fixed size
-
-  // Image style remains the same - it should fill its container
   postImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover', // Cover ensures the image fills the square space
+    resizeMode: 'cover',
   },
   textPostContainer: {
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    height: '100%', // Fill the item
+    height: '100%',
+    backgroundColor: '#FFFFFF',
   },
   textPostContent: {
-    fontSize: 12, // Smaller font for potentially small squares
-    color: '#333',
+    fontSize: 12,
+    color: '#666666',
     textAlign: 'center',
   },
-  createPostButton: {
-    backgroundColor: '#4B0082',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+  videoIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
   },
-  createPostButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  // Optional: Error styling
-  errorContainer: {
-    marginHorizontal: 15,
-    marginTop: 10,
-    padding: 10,
-    backgroundColor: '#ffe0e0',
-    borderRadius: 4,
+  loadingContainer: {
+    paddingVertical: 50,
     alignItems: 'center',
   },
-  errorText: {
-    color: '#c00',
+  loadingText: {
+    marginTop: 10,
+    color: '#666666',
     fontSize: 14,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 50,
+  },
+  emptyStateText: {
+    color: '#666666',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  errorContainer: {
+    backgroundColor: '#FFEBEE', // Light red background
+    padding: 10,
+    margin: 15,
+    borderRadius: 5,
+  },
+  errorText: {
+    color: '#D32F2F', // Material Design red
     textAlign: 'center',
   },
-  // Add new styles for the followers/following functionality
+  bottomTabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 0.5,
+    borderTopColor: '#E0E0E0',
+  },
+  tabBarItem: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabProfilePic: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+
+  // Keep the existing modal styles
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    backgroundColor: '#fff',
-    zIndex: 1000,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
   },
   modalBackButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#000000',
   },
   modalPlaceholder: {
     width: 40,
   },
   userListContainer: {
     padding: 15,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     flex: 1,
   },
   userItemContainer: {
@@ -1413,13 +1564,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 10,
     marginBottom: 8,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
   },
   userItemMain: {
     flexDirection: 'row',
@@ -1431,8 +1577,6 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     marginRight: 15,
-    borderWidth: 2,
-    borderColor: '#fff',
   },
   userItemInfo: {
     flex: 1,
@@ -1440,24 +1584,11 @@ const styles = StyleSheet.create({
   userItemName: {
     fontWeight: '600',
     fontSize: 16,
-    color: '#333',
+    color: '#000000',
     marginBottom: 2,
   },
   userItemUsername: {
-    color: '#666',
-    fontSize: 14,
-  },
-  userItemAction: {
-    backgroundColor: '#4B0082',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 10,
-  },
-  userItemActionText: {
-    color: '#fff',
-    fontWeight: '600',
-    // backgroundColor : "#4b0082",
+    color: '#666666',
     fontSize: 14,
   },
   actionButtonsContainer: {
@@ -1467,44 +1598,59 @@ const styles = StyleSheet.create({
   actionButton: {
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 8,
     minWidth: 100,
     alignItems: 'center',
   },
   followButton: {
-    backgroundColor: '#4B0082',
+    backgroundColor: '#0095F6', // Instagram blue
   },
   unfollowButton: {
-    backgroundColor: '#4b0082',
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
   },
   requestedButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
   },
   acceptButton: {
-    backgroundColor: '#4B0082',
+    backgroundColor: '#0095F6',
   },
   rejectButton: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#FF3B30',
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
   },
   followBackButton: {
-    backgroundColor: '#6A0DAD', // Slightly different purple to distinguish from regular follow
+    backgroundColor: '#0095F6',
   },
   messageBubbleButton: {
-    backgroundColor: '#1E90FF', // Sky blue color for message button
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
   },
   errorButton: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#FF3B30',
   },
-  actionsContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  // Add new styles for unfollow and requested button text
+  unfollowButtonText: {
+    color: '#000000',
+    fontWeight: '600',
+    fontSize: 14,
   },
-  iconButton: {
-    padding: 5,
+  requestedButtonText: {
+    color: '#000000',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  messageBubbleButtonText: {
+    color: '#000000',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
