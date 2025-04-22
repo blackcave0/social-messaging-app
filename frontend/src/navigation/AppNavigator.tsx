@@ -12,6 +12,7 @@ import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 
 // Auth screens
 import LoginScreen from '../screens/LoginScreen';
@@ -33,6 +34,7 @@ import SearchScreen from '../screens/SearchScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import { User } from '../types/User';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import StoriesScreen from '../screens/StoriesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -54,6 +56,7 @@ const HomeStack = () => (
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="CreatePost" component={CreatePostScreen} />
     <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
+    <Stack.Screen name="Stories" component={StoriesScreen} />
   </Stack.Navigator>
 );
 
@@ -74,6 +77,8 @@ const ProfileStack = () => (
     <Stack.Screen name="PostDetails" component={PostDetailsScreen} options={{ headerTitle: 'All Posts' }} />
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+    <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
+    <Stack.Screen name="Stories" component={StoriesScreen} />
   </Stack.Navigator>
 );
 
@@ -109,7 +114,7 @@ const MainNavigator = () => {
           </Text>
         </View>
       </TouchableOpacity>
-      )
+    )
   };
 
   const DEFAULT_AVATAR = 'https://i.imgur.com/6VBx3io.png';
@@ -176,7 +181,7 @@ const MainNavigator = () => {
                     style={{ width: 24, height: 24 }}
                   />
                 </View>
-                
+
               </View>
               {/* </TouchableOpacity> */}
             </FontAwesome> : <FontAwesome name="user-o" size={30} color={color} />
@@ -191,7 +196,7 @@ const MainNavigator = () => {
   );
 };
 
-// Root navigator
+// Main navigator
 export default function AppNavigator() {
   const { user, isLoading, logout } = useAuthContext();
 
@@ -199,52 +204,24 @@ export default function AppNavigator() {
     return null; // Or a splash screen / loading indicator
   }
 
-  return user ? (
+  return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Main" component={MainNavigator} />
-      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-      <Stack.Screen
-        name="ChatList"
-        options={{
-          headerShown: true,
-          title: "Messages"
-        }}
-      >
-        {(props) => (
-          <ChatProvider>
-            <ChatListScreen {...props} />
-          </ChatProvider>
-        )}
-      </Stack.Screen>
-      <Stack.Screen
-        name="ChatDetail"
-        options={{
-          headerShown: true,
-          title: "Chat"
-        }}
-      >
-        {(props) => (
-          <ChatProvider>
-            <ChatScreen {...props} />
-          </ChatProvider>
-        )}
-      </Stack.Screen>
-      <Stack.Screen
-        name="UserList"
-        options={{
-          title: 'New Message',
-          headerShown: true
-        }}
-      >
-        {(props) => (
-          <ChatProvider>
-            <UserListScreen {...props} />
-          </ChatProvider>
-        )}
-      </Stack.Screen>
-
+      {!user ? (
+        // Authentication screens
+        <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+        </>
+      ) : (
+        // Main app screens
+        <>
+          <Stack.Screen name="Main" component={MainNavigator} />
+          <Stack.Screen name="ChatList" component={ChatStackNavigator} />
+          <Stack.Screen name="ChatDetail" component={ChatScreen} />
+          <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+          <Stack.Screen name="Stories" component={StoriesScreen} />
+        </>
+      )}
     </Stack.Navigator>
-  ) : (
-    <AuthNavigator />
   );
 } 
