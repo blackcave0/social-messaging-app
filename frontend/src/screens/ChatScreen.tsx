@@ -35,6 +35,8 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
   // Add a state variable to track the UI state (loading, error, or normal)
   const [uiState, setUiState] = useState<'normal' | 'loading' | 'error'>('normal');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
 
   const [recipientId, setRecipientId] = useState<string | undefined>(routeUserId);
   const { user } = useAuthContext();
@@ -59,7 +61,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   const [optimisticMessages, setOptimisticMessages] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  const [onAcc, setAcc] = useState<any[]>([]);
   // Add validation for route params
   useEffect(() => {
     // Log route parameters for debugging
@@ -80,7 +82,8 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   const scrollToBottom = useCallback((animated = false) => {
     if (flatListRef.current && (localMessages.length + optimisticMessages.length) > 0) {
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated });
+        // Since the FlatList is inverted, we need to scroll to the beginning
+        flatListRef.current?.scrollToOffset({ offset: 0, animated });
       }, 100);
     }
   }, [localMessages.length, optimisticMessages.length]);
@@ -91,6 +94,8 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       console.log('Syncing messages from context:', messages.length);
 
       // Create a map of existing local messages by ID for faster lookup
+      // console.log('localMessages', localMessages.map(msg => msg.text));
+
       const existingMessageMap = new Map();
       localMessages.forEach(msg => {
         const msgId = msg._id || msg.id;
@@ -107,7 +112,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       });
 
       // Filter messages from context
-      const uniqueMessages = messages.reduce((acc: any[], message: any) => {
+      const uniqueMessages: Message[] = messages.reduce<Message[]>((acc, message) => {
         const messageId = message._id || message.id;
         const messageText = (message.text || '').toLowerCase();
         const msgKey = `${message.text}-${message.sender_id}`;
@@ -150,6 +155,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
           acc.push(message);
         }
 
+        // console.log(acc.length);
+        const timeout = setTimeout(() => {
+          setAcc(acc);
+        }, 1000);
+
+        // Return the accumulator array
         return acc;
       }, []);
 
@@ -166,7 +177,8 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       const sortedMessages = [...uniqueMessages].sort((a, b) => {
         const aTime = new Date(a.created_at || a.createdAt || 0).getTime();
         const bTime = new Date(b.created_at || b.createdAt || 0).getTime();
-        return aTime - bTime;
+        // Change to descending order (newest to oldest)
+        return bTime - aTime;
       });
 
       // Don't overwrite local messages, merge with them
@@ -191,10 +203,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
         });
       });
 
-      // Scroll to bottom when new messages arrive
-      scrollToBottom(true);
+      // Only scroll to bottom when new messages arrive, not on initial load
+      if (!isInitialLoad) {
+        scrollToBottom(true);
+      }
     }
-  }, [messages, scrollToBottom, conversationId]);
+  }, [messages, scrollToBottom, conversationId, isInitialLoad]);
 
   // Set up typing indicator socket events
   useEffect(() => {
@@ -339,7 +353,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
           }
 
           // Always add message if it doesn't exist
-          return [...prev, newMessage];
+          return [newMessage, ...prev];
         });
 
         // IMPORTANT: DON'T clear optimistic messages completely
@@ -583,10 +597,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   useEffect(() => {
     const loadConversation = async () => {
       try {
+        setUiState('loading');
+        setIsInitialLoad(true);
+        setMessagesLoaded(false);
+
         // If we already have a conversationId, use it
         if (conversationId) {
-          // console.log(`Loading messages for existing conversation: ${conversationId}`);
-
           // Clear any previously loaded messages first
           setLocalMessages([]);
           setOptimisticMessages([]);
@@ -599,7 +615,6 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
           // Mark messages as read both on client and server
           if (socket) {
-            // console.log(`Marking messages as read in conversation: ${conversationId}`);
             socket.emit('mark_read', {
               conversationId,
               userId: user?._id
@@ -608,12 +623,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
           // Also use the API to mark messages as read
           await markMessagesAsRead(conversationId);
-
+          setMessagesLoaded(true);
+          setUiState('normal');
           return;
         }
 
         // Otherwise create a new conversation with the user
-        // console.log(`Creating conversation with user: ${routeUserId}`);
         const conversation = await getOrCreateConversation(routeUserId);
         if (conversation) {
           // Use the conversation ID (handle both MongoDB and Supabase formats)
@@ -633,7 +648,6 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
             // Mark messages as read both on client and server
             if (socket) {
-              // console.log(`Marking messages as read in new conversation: ${convoId}`);
               socket.emit('mark_read', {
                 conversationId: convoId,
                 userId: user?._id
@@ -642,12 +656,15 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
             // Also use the API to mark messages as read
             await markMessagesAsRead(convoId);
-          } else {
-            console.error("Conversation has no valid ID");
+            setMessagesLoaded(true);
+            setUiState('normal');
           }
         }
       } catch (err) {
         console.error('Error loading conversation:', err);
+        setUiState('error');
+      } finally {
+        setIsInitialLoad(false);
       }
     };
 
@@ -734,13 +751,15 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
   // Scroll to bottom when keyboard appears or component mounts
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (flatListRef.current) {
-        flatListRef.current.scrollToEnd({ animated: true });
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
+    // Only scroll to bottom on initial mount if we have messages
+    if (flatListRef.current && localMessages.length > 0) {
+      // Use a longer delay to ensure the component is fully rendered
+      const timer = setTimeout(() => {
+        // Since the FlatList is inverted, we need to scroll to the beginning
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   // Make sure messages are displayed properly on component mount
@@ -751,12 +770,8 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       getMessages(conversationId, 1, 100);
     }
 
-    // Scroll to bottom on initial load
-    const initialScrollTimer = setTimeout(() => {
-      scrollToBottom(false);
-    }, 500);
-
-    return () => clearTimeout(initialScrollTimer);
+    // Don't automatically scroll to bottom on initial load
+    // Let the user see the messages first
   }, [conversationId]);
 
   // Cleanup when component unmounts
@@ -852,7 +867,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       };
 
       // Add to optimistic messages
-      setOptimisticMessages(prev => [...prev, optimisticMessage]);
+      setOptimisticMessages(prev => [optimisticMessage, ...prev]);
 
       // Scroll to bottom after adding the optimistic message
       scrollToBottom(true);
@@ -1087,14 +1102,14 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
 
   // Update UI state based on loading and error states
   useEffect(() => {
-    if (isLoading && messages.length === 0 && optimisticMessages.length === 0) {
+    if (isLoading && !messagesLoaded) {
       setUiState('loading');
-    } else if (error && messages.length === 0 && optimisticMessages.length === 0) {
+    } else if (error && !messagesLoaded) {
       setUiState('error');
-    } else {
+    } else if (messagesLoaded) {
       setUiState('normal');
     }
-  }, [isLoading, error, messages.length, optimisticMessages.length]);
+  }, [isLoading, error, messagesLoaded]);
 
   // Combine local and optimistic messages for rendering
   const allMessages = [...localMessages, ...optimisticMessages];
@@ -1172,11 +1187,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       {uiState === 'loading' ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4B0082" />
+          <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
       ) : uiState === 'error' ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>{error || 'Failed to load messages'}</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => {
@@ -1212,23 +1228,33 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
               />
             )}
             keyExtractor={(item, index) => {
-              // Generate a truly unique key based on multiple parameters
               const baseId = item._id || item.id || `temp-${Date.now()}`;
               const senderId = item.sender_id || item.sender?._id || 'unknown';
               const timestamp = item.created_at || item.createdAt || new Date().toISOString();
-              // Add index to ensure uniqueness even with duplicate messages
               return `msg-${baseId}-${senderId}-${index}`;
             }}
             contentContainerStyle={styles.messagesList}
-            inverted={false}
-            onContentSizeChange={() => scrollToBottom(false)}
-            onLayout={() => scrollToBottom(false)}
+            inverted={true}
+            onContentSizeChange={() => {
+              // Only scroll to bottom on content size change if it's not the initial load
+              if (!isInitialLoad) {
+                scrollToBottom(false);
+              }
+            }}
+            onLayout={() => {
+              // Only scroll to bottom on layout if it's not the initial load
+              if (!isInitialLoad) {
+                scrollToBottom(false);
+              }
+            }}
             removeClippedSubviews={false}
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No messages yet</Text>
-                <Text style={styles.emptySubText}>Start the conversation!</Text>
-              </View>
+              isInitialLoad ? null : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No messages yet</Text>
+                  <Text style={styles.emptySubText}>Start the conversation!</Text>
+                </View>
+              )
             }
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
@@ -1281,6 +1307,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
   errorContainer: {
     flex: 1,
