@@ -61,39 +61,72 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Store the origin of navigation to determine where to go back
+  const [fromProfileTab] = useState(() => {
+    // Check if we are coming from the Profile tab
+    // This is determined by examining the navigation state
+    try {
+      const navState = navigation.getState();
+      // Check if we are in the Profile tab by examining the routes
+      return navState.routes.some(route =>
+        route.name === 'Profile' ||
+        (route.state && route.state.routes.some(r => r.name === 'Profile'))
+      );
+    } catch (err) {
+      console.error('Error checking navigation state:', err);
+      return false;
+    }
+  });
+
   // Handle back button press to maintain navigation history
   const handleBackPress = useCallback(() => {
     // Check if we came from a user profile or somewhere else
     const fromUserProfile = !!userId;
 
-    // console.log('Going back from PostDetails, fromUserProfile:', fromUserProfile);
-
-    if (fromUserProfile && navigation.canGoBack()) {
-      // If we came from a user profile, try to go back to that profile
+    // Try to go back if we can
+    if (navigation.canGoBack()) {
       navigation.goBack();
-    } else {
-      // If there's nowhere to go back, navigate to the Home screen in the main tab
-      try {
-        // Cast navigation to any to avoid TypeScript errors with nested navigation
-        (navigation as any).navigate('Main', {
-          screen: 'Home',
+      return;
+    }
+
+    // If we can't go back, we need to reset navigation to an appropriate screen
+    try {
+      if (fromUserProfile) {
+        // Navigate back to the Profile tab stack with UserProfile screen
+        (navigation as any).navigate('Profile', {
+          screen: 'UserProfile',
           params: {
-            screen: 'Feed'
+            userId: userId,
+            userName: userName
           }
         });
-      } catch (err) {
-        console.error('Navigation error:', err);
-        // Fallback navigation
-        navigation.navigate('Feed');
+      } else {
+        // If we're viewing our own profile posts or all posts
+        // Navigate to the Profile tab
+        (navigation as any).navigate('Profile', {
+          screen: 'MyProfile'
+        });
       }
+    } catch (err) {
+      console.error('Navigation error:', err);
+      // Last resort fallback - just go to our profile
+      navigation.navigate('Profile');
     }
-  }, [navigation, userId]);
+  }, [navigation, userId, userName]);
 
   // Setup navigation header and back button handling
   useLayoutEffect(() => {
+    // Determine appropriate header title based on available information
+    let headerTitle = 'All Posts';
+
+    if (userId) {
+      // Only add the @ symbol and username if userName is defined
+      headerTitle = userName ? `@${userName}` : 'User Posts';
+    }
+
     navigation.setOptions({
       headerShown: true,
-      headerTitle: userId ? userName : 'All Posts',
+      headerTitle,
       headerLeft: () => (
         <TouchableOpacity
           style={{ padding: 10 }}
@@ -103,7 +136,7 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, userId, posts, handleBackPress]);
+  }, [navigation, userId, userName, handleBackPress]);
 
   // Fetch all posts
   const fetchPosts = useCallback(async () => {
@@ -119,10 +152,10 @@ const PostDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         filteredPosts = filteredPosts.filter(post => post.user && post.user._id === userId);
         // console.log(`Found ${filteredPosts.length} posts for user ${userId}`);
 
-        // Update header title if we have posts
-        if (filteredPosts.length > 0 && filteredPosts[0].user.name) {
+        // Update header title if we have posts and can get a valid username
+        if (filteredPosts.length > 0 && filteredPosts[0].user && filteredPosts[0].user.username) {
           navigation.setOptions({
-            headerTitle: `${filteredPosts[0].user.name}'s Posts`
+            headerTitle: `@${filteredPosts[0].user.username}`
           });
         }
       } else {
